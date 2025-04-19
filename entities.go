@@ -15,6 +15,9 @@ type UserStore interface {
 
 // Client is an OAuth 2.0 client interface.
 type Client interface {
+	// GetName returns the human-readable name of the client.
+	GetName() string
+
 	// CheckSecret check the given secret string against the client
 	// to see if it is valid.
 	CheckSecret(secret string) error
