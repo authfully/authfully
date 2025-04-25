@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // Client is a struct that represents an OAuth 2.0 client.
 // It implements authfully.Client interface.
 type Client struct {
+	gorm.Model
 	ID               string `json:"ID"`
 	SecretHash       string `json:"-"`
 	SecretHashSalt   string `json:"-"`
@@ -18,10 +21,10 @@ type Client struct {
 	UserID string `json:"UserID"`
 
 	// RedirectURIs is a list of valid redirect URIs for the client.
-	RedirectURIs []string `json:"RedirectURIs"`
+	RedirectURIs []string `json:"RedirectURIs" gorm:"type:[]text;serializer:json"`
 
 	// Scopes is a list of valid scopes for the client.
-	Scopes []string `json:"Scopes"`
+	Scopes []string `json:"Scopes" gorm:"type:[]text;serializer:json"`
 }
 
 // CheckSecret checks the given secret string against the client
