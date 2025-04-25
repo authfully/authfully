@@ -30,6 +30,12 @@ type DefaultClient struct {
 	Scopes []string `json:"Scopes" gorm:"serializer:json"`
 }
 
+// TableName returns the name of the table in the database.
+// This is used by GORM to map the struct to the table.
+func (c *DefaultClient) TableName() string {
+	return "oauth_clients"
+}
+
 // GetID returns the ID of the client.
 func (c *DefaultClient) GetID() string {
 	return c.ID
