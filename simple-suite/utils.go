@@ -17,7 +17,7 @@ func generateSalt() string {
 	return base64.URLEncoding.EncodeToString(bytes)
 }
 
-func hashPassword(password, salt, method string) string {
+func HashPassword(password, salt, method string) string {
 	// Use SHA256 hashing algorithm
 	// and return the base64 encoded hash
 	switch strings.ToLower(method) {
@@ -32,7 +32,7 @@ func hashPassword(password, salt, method string) string {
 	}
 }
 
-func checkPassword(password, hash, salt, method string) error {
+func CheckPassword(password, hash, salt, method string) error {
 	// Use SHA256 hashing algorithm
 	// and compare the hash with the stored password hash
 	var passwordHash string

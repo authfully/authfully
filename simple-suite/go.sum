@@ -1,3 +1,7 @@
+github.com/authfully/authfully v0.0.0-20250425075723-f635bbeb9c36 h1:X4QPJU0LvVp9SM+9XLZiEX95aIVXJcp11liBGBSP3iY=
+github.com/authfully/authfully v0.0.0-20250425075723-f635bbeb9c36/go.mod h1:q2kA2V+vPGnz4/x/QkFYGoXrO8fqGhpG8YWvmTJ9RvE=
+github.com/authfully/authfully v0.0.0-20250425081145-cdde51ea1548 h1:xzVDjY2MKddG9VOmkNgq3thiui3+syyd+OfSsOWhSuw=
+github.com/authfully/authfully v0.0.0-20250425081145-cdde51ea1548/go.mod h1:q2kA2V+vPGnz4/x/QkFYGoXrO8fqGhpG8YWvmTJ9RvE=
 github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
 github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=

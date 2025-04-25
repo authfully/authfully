@@ -3,6 +3,7 @@ module github.com/authfully/authfully/simple-suite
 go 1.24.1
 
 require (
+	github.com/authfully/authfully v0.0.0-20250425081145-cdde51ea1548
 	github.com/joho/godotenv v1.5.1
 	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.25.12
