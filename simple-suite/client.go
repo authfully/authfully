@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/authfully/authfully"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -103,6 +104,19 @@ func NewClientStore(db *gorm.DB) *DefaultClientStore {
 
 // Create creates a new client in the database
 func (cs *DefaultClientStore) Create(client *DefaultClient) error {
+	var count int64 = 1
+	var id string
+	for count > 0 {
+		// Generate a UUID for the client and check if it is unique
+		id = uuid.New().String()
+		q := cs.db.Model(&DefaultClient{}).Where("id = ?", client.ID)
+		if q.Error != nil {
+			return fmt.Errorf("failed to check client ID uniqueness: %w", q.Error)
+		}
+		q.Count(&count)
+	}
+	client.ID = id
+
 	if err := cs.db.Create(client).Error; err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
