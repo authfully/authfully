@@ -13,8 +13,8 @@ import (
 // It implements authfully.DefaultClient interface.
 type DefaultClient struct {
 	gorm.Model
+	ID               string `json:"ID" gorm:"primaryKey"`
 	Name             string `json:"Name"`
-	ID               string `json:"ID"`
 	SecretHash       string `json:"-"`
 	SecretHashSalt   string `json:"-"`
 	SecretHashMethod string `json:"-"`
@@ -119,7 +119,7 @@ func (cs *DefaultClientStore) Update(id string, client *DefaultClient) error {
 
 // Delete deletes a client from the database
 func (cs *DefaultClientStore) Delete(id string) error {
-	if err := cs.db.Delete(&DefaultClient{}, id).Error; err != nil {
+	if err := cs.db.Where("id = ?", id).Delete(&DefaultClient{}).Error; err != nil {
 		return fmt.Errorf("failed to delete client: %w", err)
 	}
 	return nil
