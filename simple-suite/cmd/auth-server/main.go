@@ -30,6 +30,6 @@ func main() {
 
 	// Migrate the schema
 	log.Printf("Migrating database schema")
-	db.AutoMigrate(&authfullysimple.Client{})
+	db.AutoMigrate(&authfullysimple.DefaultClient{})
 	log.Printf("Migrated database schema")
 }

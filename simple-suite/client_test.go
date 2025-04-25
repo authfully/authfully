@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func ClientStoreTest(t *testing.T) {
+func DefaultClientStoreTest(t *testing.T) {
 	// Create a new in-memory SQLite database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -29,7 +29,7 @@ func ClientStoreTest(t *testing.T) {
 	}
 
 	// Test creating a new client
-	client := &authfullysimple.Client{
+	client := &authfullysimple.DefaultClient{
 		ID:   "test-client",
 		Name: "Test Client",
 	}
@@ -50,7 +50,7 @@ func ClientStoreTest(t *testing.T) {
 		t.Errorf("Expected client name %s, got %s", want, have)
 	}
 
-	castedRetrivedClient, ok := retrievedClient.(*authfullysimple.Client)
+	castedRetrivedClient, ok := retrievedClient.(*authfullysimple.DefaultClient)
 	if !ok {
 		t.Fatalf("Failed to cast retrieved client to authfullysimple.Client")
 	}
