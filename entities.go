@@ -1,7 +1,10 @@
 package authfully
 
 // User is an interface that represents a user in the system.
-type User any
+type User interface {
+	// CheckPassword checks if the given password is valid for the user.
+	CheckPassword(password string) error
+}
 
 // UserStore is an interface that defines methods for user storage and retrieval.
 type UserStore interface {
