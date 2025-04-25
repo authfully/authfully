@@ -116,7 +116,7 @@ type Environment struct {
 	RandomGenerator             RandomGenerator
 	AuthorizationRequestDecoder AuthorizationRequestDecoder
 	AuthSubmissionDecoder       AuthSubmissionDecoder
-	Logger                      slog.Logger
+	Logger                      *slog.Logger
 }
 
 // CalculateExpiresIn calculates the remaining time until the token expires.
