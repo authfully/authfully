@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -50,4 +51,22 @@ func CheckPassword(password, hash, salt, method string) error {
 		return fmt.Errorf("password does not match")
 	}
 	return nil
+}
+
+// ParseAddress parses the port string and returns a formatted address.
+// If the port string is empty, it uses the default port.
+// It returns an error if the port number is invalid.
+// The address is formatted as ":<port>".
+func ParseAddress(portStr, defaultPort string) (string, error) {
+	if portStr == "" {
+		portStr = defaultPort
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", err
+	}
+	if port < 1 || port > 65535 {
+		return "", fmt.Errorf("port number out of range: %d", port)
+	}
+	return ":" + strconv.Itoa(port), nil
 }

@@ -2,17 +2,19 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"html/template"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 
+	authfullysimple "github.com/authfully/authfully/simple-suite"
 	"github.com/joho/godotenv"
 )
+
+// Default port to use if not set in the environment variable
+const defaultPort = "8080"
 
 // Hard code to use this callback path for redirect uri
 const callbackPath = "/callback"
@@ -22,20 +24,6 @@ var indexHTML string
 
 //go:embed assets
 var assetsFS embed.FS
-
-func parseAddress(portStr, defaultPort string) (string, error) {
-	if portStr == "" {
-		portStr = defaultPort
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return "", err
-	}
-	if port < 1 || port > 65535 {
-		return "", fmt.Errorf("port number out of range: %d", port)
-	}
-	return ":" + strconv.Itoa(port), nil
-}
 
 func deriveRedirectUri(r *http.Request, path string) (redirectUri *url.URL) {
 	scheme := r.URL.Scheme
@@ -70,13 +58,12 @@ func main() {
 	if os.Getenv("AUTH_ENDPOINT_URL") == "" {
 		log.Fatal("AUTH_ENDPOINT_URL is not set")
 	}
-	defaultPort := "8080"
 	if os.Getenv("PORT") == "" {
 		log.Printf("PORT is not set, fallback to default %s", defaultPort)
 	}
 
 	// Parse the port number from the environment variable
-	addr, err := parseAddress(os.Getenv("PORT"), defaultPort)
+	addr, err := authfullysimple.ParseAddress(os.Getenv("PORT"), defaultPort)
 	if err != nil {
 		log.Fatalf("Invalid port number: %v", err)
 	}
