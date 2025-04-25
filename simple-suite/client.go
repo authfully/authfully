@@ -37,17 +37,20 @@ func (c *DefaultClient) TableName() string {
 }
 
 // GetID returns the ID of the client.
+// Implements the authfully.Client interface.
 func (c *DefaultClient) GetID() string {
 	return c.ID
 }
 
 // GetName returns the human-readable name of the client.
+// Implements the authfully.Client interface.
 func (c *DefaultClient) GetName() string {
 	return c.Name
 }
 
 // CheckSecret checks the given secret string against the client
 // to see if it is valid.
+// Implements the authfully.Client interface.
 func (c *DefaultClient) CheckSecret(secret string) error {
 	return CheckPassword(secret, c.SecretHash, c.SecretHashSalt, c.SecretHashMethod)
 }
@@ -68,6 +71,7 @@ func (c *DefaultClient) SetSecret(secret string) error {
 }
 
 // CheckRedirectURI checks if the redirect URI matches the supposed redirect URI.
+// Implements the authfully.Client interface.
 func (c *DefaultClient) CheckRedirectURI(redirectURI string) error {
 	// Remove query parameters from the redirect URI
 	// and trim any leading or trailing whitespace
@@ -80,6 +84,7 @@ func (c *DefaultClient) CheckRedirectURI(redirectURI string) error {
 }
 
 // CheckScope checks if all the requested scopes are valid for the client.
+// Implements the authfully.Client interface.
 func (c *DefaultClient) CheckScope(scope string) error {
 	// Split the scope string into a slice of scopes
 	scopes := strings.Split(scope, " ")
@@ -146,6 +151,7 @@ func (cs *DefaultClientStore) Delete(id string) error {
 }
 
 // Close closes the database connection
+// Implements the authfully.ClientStore interface.
 func (cs *DefaultClientStore) GetClientByID(id string) (authfully.Client, error) {
 	var client DefaultClient
 	if err := cs.db.Where("id = ?", id).First(&client).Error; err != nil {
@@ -154,6 +160,8 @@ func (cs *DefaultClientStore) GetClientByID(id string) (authfully.Client, error)
 	return &client, nil
 }
 
+// AutoMigrate automatically migrates the database schema
+// to match the DefaultClient struct.
 func (cs *DefaultClientStore) AutoMigrate() error {
 	// Migrate the schema
 	if err := cs.db.AutoMigrate(&DefaultClient{}); err != nil {
