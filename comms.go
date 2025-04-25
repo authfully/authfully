@@ -25,12 +25,12 @@ type AuthorizationRequest struct {
 	CodeChallengeMethod string `json:"code_challenge_method,omitempty"`
 }
 
-// AuthorizationResponse represents an OAuth 2.0 authorization response.
+// AuthResponse represents an OAuth 2.0 authorization response.
 //
 // References:
 // - https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2
 // - https://www.oauth.com/oauth2-servers/pkce/authorization-response/
-type AuthorizationResponse struct {
+type AuthResponse struct {
 
 	// ResponseType repeats the response_type of the request.
 	ResponseType string `json:"response_type,omitempty"`
@@ -46,11 +46,16 @@ type AuthorizationResponse struct {
 
 	// For implicit flow, the access token error is returned in the URL fragment.
 	AccessTokenErrorResponse *AccessTokenErrorResponse `json:"-"`
+
+	// Extra is an optional map of extra fields.
+	// It is used to store any extra fields that are not defined in the OAuth 2.0 specification.
+	// It is used for custom message.
+	Extra map[string]string `json:"-"`
 }
 
-// ToQueryValues converts the AuthorizationResponse to a url.Values to
+// ToQueryValues converts the AuthResponse to a url.Values to
 // be easily converted to URL encoded query string.
-func (resp AuthorizationResponse) ToQueryValues() url.Values {
+func (resp AuthResponse) ToQueryValues() url.Values {
 	v := url.Values{}
 
 	// If the response is an access token response, use that.
@@ -76,8 +81,8 @@ func (resp AuthorizationResponse) ToQueryValues() url.Values {
 	return v
 }
 
-// AuthorizationErrorResponse represents an OAuth 2.0 authorization error response.
-type AuthorizationErrorResponse struct {
+// AuthErrorResponse represents an OAuth 2.0 authorization error response.
+type AuthErrorResponse struct {
 	// Error is an optional error string.
 	// It is used when the authorization request fails.
 	// It can be "invalid_request", "unauthorized_client", "access_denied",
@@ -91,10 +96,15 @@ type AuthorizationErrorResponse struct {
 
 	// ErrorURI is an optional error URI.
 	ErrorURI string `json:"error_uri,omitempty"`
+
+	// Extra is an optional map of extra fields.
+	// It is used to store any extra fields that are not defined in the OAuth 2.0 specification.
+	// It is used for custom error responses.
+	Extra map[string]string `json:"-"`
 }
 
 // Error implements the error interface for AuthorizationErrorResponse.
-func (e AuthorizationErrorResponse) Error() string {
+func (e AuthErrorResponse) Error() string {
 	// Remove underscores of the .Error field
 	// to make it more user-friendly.
 	msg := e.ErrorDescription
@@ -122,7 +132,7 @@ func (e AuthorizationErrorResponse) Error() string {
 
 // ToQueryValues converts the AuthorizationErrorResponse to a url.Values to
 // be easily converted to URL encoded query string.
-func (e AuthorizationErrorResponse) ToQueryValues() url.Values {
+func (e AuthErrorResponse) ToQueryValues() url.Values {
 	v := url.Values{}
 	if e.ErrorType != "" {
 		v.Set("error", e.ErrorType)
