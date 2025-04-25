@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Example Client App</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header>
+    <h1>Example Client App</h1>
+</header>
+<main>
+    <div id="app">
+        <h2>Welcome to the Example Client App!</h2>
+        <p>This is a simple example of a client-side application.</p>
+        <div class="actions">
+            <button id="login" disabled>Login</button>
+        </div>
+    </div>
+</main>
+<footer>
+    <p>&copy; 2023 Example Client App</p>
+</footer>
+<script type="module">
+import { Client } from '/assets/client.js';
+
+const loginButton = document.getElementById('login');
+if (loginButton) {
+    loginButton.addEventListener('click', () => {
+        const client = new Client({
+            authEndpoint: {{ .AuthEndpoint }},
+            clientId: {{ .ClientID }},
+            redirectUri: {{ .RedirectURI }},
+            scope: {{ .Scope }},
+            state: {{ .State }},
+        });
+        client.login();
+    });
+
+    // Enable the login button once the script is loaded.
+    loginButton.disabled = false;
+}
+
+</script>
+</body>
+</html>
