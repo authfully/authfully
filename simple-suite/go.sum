@@ -2,6 +2,10 @@ github.com/authfully/authfully v0.0.0-20250425075723-f635bbeb9c36 h1:X4QPJU0LvVp
 github.com/authfully/authfully v0.0.0-20250425075723-f635bbeb9c36/go.mod h1:q2kA2V+vPGnz4/x/QkFYGoXrO8fqGhpG8YWvmTJ9RvE=
 github.com/authfully/authfully v0.0.0-20250425081145-cdde51ea1548 h1:xzVDjY2MKddG9VOmkNgq3thiui3+syyd+OfSsOWhSuw=
 github.com/authfully/authfully v0.0.0-20250425081145-cdde51ea1548/go.mod h1:q2kA2V+vPGnz4/x/QkFYGoXrO8fqGhpG8YWvmTJ9RvE=
+github.com/authfully/authfully v0.0.0-20250425091639-cd477a614d4e h1:YUO7y2kfVWrrNM2CyfPYyWSBVf2+/nKC00AUCKKAP88=
+github.com/authfully/authfully v0.0.0-20250425091639-cd477a614d4e/go.mod h1:q2kA2V+vPGnz4/x/QkFYGoXrO8fqGhpG8YWvmTJ9RvE=
+github.com/authfully/authfully v0.0.0-20250425091903-f48e092a8d69 h1:UZc+M8ZHYaEtIvnUz3geVLrWTvWr3rdZYqIAzaZqHp8=
+github.com/authfully/authfully v0.0.0-20250425091903-f48e092a8d69/go.mod h1:q2kA2V+vPGnz4/x/QkFYGoXrO8fqGhpG8YWvmTJ9RvE=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
