@@ -21,7 +21,7 @@ func TestDefaultClientStore(t *testing.T) {
 	dsn := ":memory:"
 	if debugFlag != "" {
 		logLevel = logger.Info
-		dsn = "TestDefaultClientStore.sqlite3"
+		dsn = t.Name() + ".sqlite3"
 
 		if _, err := os.Stat(dsn); err == nil {
 			// Remove the file if it exists
@@ -63,13 +63,34 @@ func TestDefaultClientStore(t *testing.T) {
 	}
 
 	// Test creating a new client
+	secretToUse := "my-secret"
 	client := &authfullysimple.DefaultClient{
-		ID:   "test-client",
-		Name: "Test Client",
+		ID:     "",
+		Name:   "Test Client",
+		UserID: "user-id",
 	}
+	client.SetSecret(secretToUse)
 	err = clientStore.Create(client)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
+	}
+	if client.ID == "" {
+		t.Fatalf("Client ID should not be empty after creation")
+	}
+	if want, have := client.ID, client.GetID(); want != have {
+		t.Errorf("Expected client ID %s, got %s", want, have)
+	}
+	if client.SecretHash == "" {
+		t.Errorf("Client secret hash should not be empty after creation")
+	}
+	if client.SecretHashMethod == "" {
+		t.Errorf("Client secret hash method should not be empty after creation")
+	}
+	if client.SecretHashSalt == "" {
+		t.Errorf("Client secret hash salt should not be empty after creation")
+	}
+	if client.CheckSecret(secretToUse) != nil {
+		t.Errorf("Client secret check failed after creation")
 	}
 
 	// Test retrieving the client
