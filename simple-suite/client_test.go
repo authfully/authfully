@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func DefaultClientStoreTest(t *testing.T) {
+func TestDefaultClientStore(t *testing.T) {
 	// Create a new in-memory SQLite database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
