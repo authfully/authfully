@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -103,6 +104,27 @@ const (
 type RandomGenerator interface {
 	// Generate generates a random string of the specified length.
 	Generate(length int) (string, error)
+}
+
+// DefaultRandomGenerator is a default implementation of RandomGenerator
+type DefaultRandomGenerator struct {
+	Letters []rune
+}
+
+// NewDefaultRandomGenerator creates a new default RandomGenerator implementation
+func NewRandomGenerator() RandomGenerator {
+	return &DefaultRandomGenerator{
+		Letters: []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
+	}
+}
+
+// Generate generates a random string of the specified length.
+func (g *DefaultRandomGenerator) Generate(length int) (string, error) {
+	b := make([]rune, length)
+	for i := range b {
+		b[i] = g.Letters[rand.Intn(len(g.Letters))]
+	}
+	return string(b), nil
 }
 
 // Environment is a struct that holds the necessary components
