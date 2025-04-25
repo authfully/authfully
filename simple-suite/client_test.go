@@ -1,17 +1,51 @@
 package authfullysimple_test
 
 import (
+	"log"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/authfully/authfully"
 	authfullysimple "github.com/authfully/authfully/simple-suite"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func TestDefaultClientStore(t *testing.T) {
+
+	// Debug environment setup
+	logLevel := logger.Silent
+	debugFlag := os.Getenv("DEBUG")
+	dsn := ":memory:"
+	if debugFlag != "" {
+		logLevel = logger.Info
+		dsn = "TestDefaultClientStore.sqlite3"
+
+		if _, err := os.Stat(dsn); err == nil {
+			// Remove the file if it exists
+			err := os.Remove(dsn)
+			if err != nil {
+				log.Fatalf("Failed to remove file %s: %v", dsn, err)
+			}
+		}
+	}
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		logger.Config{
+			SlowThreshold:             time.Second, // Slow SQL threshold
+			LogLevel:                  logLevel,    // Log level
+			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+			ParameterizedQueries:      true,        // Don't include params in the SQL log
+			Colorful:                  true,        // Disable color
+		},
+	)
+
 	// Create a new in-memory SQLite database
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
 		panic("failed to connect database")
 	}
