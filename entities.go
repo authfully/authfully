@@ -15,6 +15,9 @@ type UserStore interface {
 
 // Client is an OAuth 2.0 client interface.
 type Client interface {
+	// GetID returns the ID of the client.
+	GetID() string
+
 	// GetName returns the human-readable name of the client.
 	GetName() string
 
