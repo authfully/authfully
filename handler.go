@@ -333,12 +333,21 @@ func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		h.ScopeAuthorizationPageTemplate.Execute(w, struct {
+		// TODO: remember the authorization request in cookie or session
+		//       so that we can use it later to generate the authorization
+		//       response.
+
+		// Show the authentication form
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		h.AuthenticationPageTemplate.Execute(w, struct {
 			Action string
 			Client Client
+			Email  string
 		}{
 			Action: env.AuthEndpoint,
 			Client: c,
+			Email:  "", // TODO: get email from submission, if any
 		})
 		return
 	}
