@@ -288,11 +288,12 @@ func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			// Basic error handling
 			err := AuthErrorResponse{
 				ErrorType:        "invalid_request",
-				ErrorDescription: "Failed to decode authorization request",
+				ErrorDescription: err.Error(),
 			}
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
-			h.ErrorPageTemplate.Execute(w, struct {
+
+			renderErr := h.ErrorPageTemplate.Execute(w, struct {
 				Title            string
 				ErrorDescription string
 				RedirectURI      string
@@ -301,6 +302,9 @@ func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 				ErrorDescription: err.ErrorDescription,
 				RedirectURI:      req.RedirectURI + "?" + err.ToQueryValues().Encode(),
 			})
+			if renderErr != nil {
+				env.Logger.Error("Failed to render error page", "error", renderErr)
+			}
 			return
 		}
 
@@ -313,7 +317,7 @@ func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			// Basic error handling
 			err := AuthErrorResponse{
 				ErrorType:        "invalid_request",
-				ErrorDescription: "Failed to get client from authorization request",
+				ErrorDescription: err.Error(),
 			}
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
@@ -350,7 +354,7 @@ func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			// Basic error handling
 			err := AuthErrorResponse{
 				ErrorType:        "invalid_request",
-				ErrorDescription: "Failed to get client from authorization request",
+				ErrorDescription: err.Error(),
 			}
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
@@ -398,7 +402,7 @@ func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			// Basic error handling
 			err := AuthErrorResponse{
 				ErrorType:        "invalid_request",
-				ErrorDescription: "Failed to handle authorization submission",
+				ErrorDescription: err.Error(),
 			}
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
