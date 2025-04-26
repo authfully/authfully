@@ -25,7 +25,7 @@ const (
 	<h1>Login</h1>
 	<form method="POST" action="{{ .Action }}">
 		<p>Login</p>
-		<input type="text" name="email" placeholder="Email" value="{{ .Email }}" required>
+		<input type="text" name="email" placeholder="Email" value="{{- if .Email }}{{ .Email }}{{- end }}" required>
 		<input type="password" name="password" placeholder="Password" required>
 		<button type="submit">Login</button>
 	</form>
@@ -66,8 +66,8 @@ const (
 	<title>Error</title>
 </head>
 <body>
-	{{- if .ErrorType }}
-		<h1>{{ .ErrorType }}</h1>
+	{{- if .Title }}
+		<h1>{{ .Title }}</h1>
 	{{- else }}
 		<h1>Error</h1>
 	{{- end }}
