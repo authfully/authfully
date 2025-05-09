@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -38,16 +39,6 @@ func requestContextMiddleware(
 		ctx := authfully.WithEnvironment(r.Context(), env)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// DefaultAuthSubmissionDecoder is a default implementation of the AuthSubmissionDecoderFunc
-// type and AuthSubmissionDecoder interface. It is used to decode the authentication submission
-// from the request.
-func DefaultAuthSubmissionDecoder(
-	r *http.Request,
-) authfully.AuthSubmission {
-	// TODO: implement me
-	return nil
 }
 
 func getLoggers(debug bool) (*slog.Logger, gormlogger.Interface) {
@@ -141,7 +132,6 @@ func main() {
 		TokenSessionStore:           nil, // TODO: implement me
 		RandomGenerator:             authfully.NewRandomGenerator(),
 		AuthorizationRequestDecoder: authfully.AuthorizationRequestDecoderFunc(authfully.DefaultAuthorizationRequestDecoder),
-		AuthSubmissionDecoder:       authfully.AuthSubmissionDecoderFunc(DefaultAuthSubmissionDecoder), // TODO: implement me
 		Logger:                      logger,
 	}
 
@@ -151,7 +141,12 @@ func main() {
 		authenticationEndpointPath,
 		requestContextMiddleware(
 			env,
-			authfully.NewAuthorizationEndpointHandler(),
+			authfully.NewUserInterfaceEndpointHandler(
+				authfully.AuthenticationPageHTML,
+				authfully.SubmissionHandlerFunc(func(r *http.Request) (ctx context.Context, err error) {
+					return r.Context(), nil
+				}),
+			),
 		),
 	)
 

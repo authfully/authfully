@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -233,26 +232,175 @@ func DefaultAuthorizationRequestDecoder(r *http.Request) (*AuthorizationRequest,
 	return req, nil
 }
 
-// AuthorizationEndpointHandler handles all requests to the authorization
-// endpoint
-type AuthorizationEndpointHandler struct {
-	AuthenticationPageTemplate     *template.Template
-	ScopeAuthorizationPageTemplate *template.Template
-	ErrorPageTemplate              *template.Template
+// SubmissionError is for commonly used submission status response.
+type SubmissionError int
+
+const (
+	// SubmissionOK indicates that the handler handled a submission
+	// with an OK status.
+	SubmissionOK SubmissionError = iota
+
+	// SubmissionInvalid is a generic "submission invalid" error
+	// meant only for development use. Please use AuthErrorResponse
+	// or other error implementation for a proper error response.
+	SubmissionInvalid
+)
+
+func (e SubmissionError) Error() string {
+	switch e {
+	case SubmissionOK:
+		return "ok"
+	case SubmissionInvalid:
+		return "submission invalid"
+	}
+	return fmt.Sprintf("unknown submission error: %d", int(e))
 }
 
-// NewAuthorizationEndpointHandler creates a new AuthorizationEndpointHandler
-// with the necessary templates for rendering the authentication and
-// authorization pages.
+// SubmissionHandler decodes the submission from the HTTP request
+// and return the login status.
+type SubmissionHandler interface {
+	// Handle decodes the submission from the given HTTP request.
+	//
+	// If there is no form submission, the error returned should be nil.
+	//
+	// If there is a form submission, the error returned should be
+	// "SubmissionOK".
+	//
+	// If the login fails, it should return an error with the error message
+	// and the error description.
+	//
+	// Handler MUST pass on a context, derived from HTTP request's context,
+	// with authorization request decoded and added using WithAuthorizationContext().
+	Handle(r *http.Request) (ctx context.Context, err error)
+}
+
+// SubmissionHandlerFunc
+type SubmissionHandlerFunc func(r *http.Request) (ctx context.Context, err error)
+
+func (f SubmissionHandlerFunc) Handle(r *http.Request) (ctx context.Context, err error) {
+	return f(r)
+}
+
+// UserInterfaceEndpointHandler is an implementation of http.Handler for handling
+// authentication (login) endpoint or the authorization endpoint for OAuth2.
 //
-// It panics if any of the templates fail to parse.
-func NewAuthorizationEndpointHandler() *AuthorizationEndpointHandler {
-	var err error
-	ScopeAuthorizationPageTemplate, err := template.New("scope_authorization").Parse(ScopeAuthorizationPageHTML)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to parse scope authorization page template: %v", err))
+// These endpoints are for user form or interaction for the authorization code
+// flow and the implicit flow.
+//
+// These endpoints would either:
+//  1. Show a user interaction form (login form or authorization form); or
+//  2. When getting a submission, it will decode the submission and then:
+//     a. If the submission is valid, it will redirect the user to another URL; or
+//     b. If the submission is invalid, it will show an error page with
+//     the error message and description. Also a "Go Back" button to
+//     redirect the user back to the application with the error.
+type UserInterfaceEndpointHandler struct {
+	// The HTML template of the form or equivlant user interface.
+	UserInterfacePageTemplate *template.Template
+
+	// Handles HTTP requests and determine to either:
+	// 1. Display the user interface HTML; or
+	// 2. Display an error page to user; or
+	// 3. Redirect user to some other URL.
+	SubmissionHandler SubmissionHandler
+
+	// The HTML template for displaying error page.
+	ErrorPageTemplate *template.Template
+}
+
+// ServeHTTP handles the authentication endpoint requests.
+func (h UserInterfaceEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	// Get logger from environment
+	env := GetEnvironment(r.Context())
+	if env == nil {
+		panic("Environment not found")
 	}
-	AuthenticationPageTemplate, err := template.New("authentication").Parse(AuthenticationPageHTML)
+	logger := env.Logger // Assumed this is not nil or this will be runtime error
+
+	// Submission handler to check and handle any user form submission
+	// or equivlant input.
+	ctx, err := h.SubmissionHandler.Handle(r)
+	if err == nil {
+		// No submission yet. Show the user interface.
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		h.UserInterfacePageTemplate.Execute(w, nil)
+		return
+	}
+	if err == SubmissionOK {
+		// Handled successfully. No worry.
+		return
+	}
+
+	// Get the authorization request from context for proper error display.
+	ar := GetAuthorizationRequest(ctx)
+	if ar == nil {
+		// Report and log error
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadRequest)
+		logger.Error(
+			"unable to retrieve the authorization request from context",
+			"ip", r.RemoteAddr,
+		)
+		h.ErrorPageTemplate.Execute(w, struct {
+			Title            string
+			ErrorDescription string
+			RedirectURI      string
+		}{
+			Title:            "Error",
+			ErrorDescription: "unable to retrieve the authorization request from context",
+			RedirectURI:      "",
+		})
+		return
+	}
+
+	// Handle AuthErrorResponse properly
+	if authErr, ok := err.(*AuthErrorResponse); ok {
+		w.Header().Set("Content-Type", "text/html")
+		switch authErr.ErrorType {
+		case "server_error":
+			w.WriteHeader(http.StatusInternalServerError)
+		case "temporarily_unavailable":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		h.ErrorPageTemplate.Execute(w, struct {
+			Title            string
+			ErrorDescription string
+			RedirectURI      string
+		}{
+			Title:            "Error",
+			ErrorDescription: err.Error(),
+			RedirectURI:      ar.RedirectURI + "?" + authErr.ToQueryValues().Encode(),
+		})
+		return
+	}
+
+	// Generic error page without redirection handle.
+	// Assumbed to be internal server error.
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusInternalServerError)
+	h.ErrorPageTemplate.Execute(w, struct {
+		Title            string
+		ErrorDescription string
+		RedirectURI      string
+	}{
+		Title:            "Error",
+		ErrorDescription: err.Error(),
+		RedirectURI:      "",
+	})
+}
+
+// NewUserInterfaceEndpointHandler returns a UserFormEndpointHandler that
+// handles
+func NewUserInterfaceEndpointHandler(
+	html string,
+	sh SubmissionHandler,
+) *UserInterfaceEndpointHandler {
+	var err error
+	pageTemplate, err := template.New("authentication").Parse(html)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse authentication page template: %v", err))
 	}
@@ -260,398 +408,9 @@ func NewAuthorizationEndpointHandler() *AuthorizationEndpointHandler {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse error page template: %v", err))
 	}
-
-	return &AuthorizationEndpointHandler{
-		AuthenticationPageTemplate:     AuthenticationPageTemplate,
-		ScopeAuthorizationPageTemplate: ScopeAuthorizationPageTemplate,
-		ErrorPageTemplate:              ErrorPageTemplate,
+	return &UserInterfaceEndpointHandler{
+		UserInterfacePageTemplate: pageTemplate,
+		ErrorPageTemplate:         ErrorPageTemplate,
+		SubmissionHandler:         sh,
 	}
 }
-
-func (h AuthorizationEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	env := GetEnvironment(r.Context())
-	if env == nil {
-		panic("Environment not found")
-	}
-	if env.AuthSubmissionDecoder == nil {
-		panic("Environment.AuthSubmissionDecoder not found")
-	}
-
-	sub := env.AuthSubmissionDecoder.Decode(r)
-	if sub == nil {
-		// First arriving at the endpoint
-		req, err := env.AuthorizationRequestDecoder.Decode(r)
-		if err != nil {
-			// Report and log error
-			env.Logger.Error("Failed to decode authorization request", slog.String("error", err.Error()))
-
-			// Basic error handling
-			err := AuthErrorResponse{
-				ErrorType:        "invalid_request",
-				ErrorDescription: err.Error(),
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusBadRequest)
-
-			renderErr := h.ErrorPageTemplate.Execute(w, struct {
-				Title            string
-				ErrorDescription string
-				RedirectURI      string
-			}{
-				Title:            err.ErrorType,
-				ErrorDescription: err.ErrorDescription,
-				RedirectURI:      req.RedirectURI + "?" + err.ToQueryValues().Encode(),
-			})
-			if renderErr != nil {
-				env.Logger.Error("Failed to render error page", "error", renderErr)
-			}
-			return
-		}
-
-		// Get client information
-		c, err := GetAndValidateClientFromAuthorizationRequest(r.Context(), req)
-		if err != nil {
-			// Report and log error
-			env.Logger.Error("Failed to get client from authorization request", slog.String("error", err.Error()))
-
-			// Basic error handling
-			err := AuthErrorResponse{
-				ErrorType:        "invalid_request",
-				ErrorDescription: err.Error(),
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusBadRequest)
-			h.ErrorPageTemplate.Execute(w, struct {
-				Title            string
-				ErrorDescription string
-				RedirectURI      string
-			}{
-				Title:            err.ErrorType,
-				ErrorDescription: err.ErrorDescription,
-				RedirectURI:      req.RedirectURI + "?" + err.ToQueryValues().Encode(),
-			})
-			return
-		}
-
-		// TODO: remember the authorization request in cookie or session
-		//       so that we can use it later to generate the authorization
-		//       response.
-
-		// Show the authentication form
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusOK)
-		h.AuthenticationPageTemplate.Execute(w, struct {
-			Action string
-			Client Client
-			Email  string
-		}{
-			Action: env.AuthEndpoint,
-			Client: c,
-			Email:  "", // TODO: get email from submission, if any
-		})
-		return
-	}
-	switch sub.GetType() {
-	case AuthenticationSubmission:
-		// Check form submission result, then the pending token session,
-		// If everything is legit, show the authorization form or equivlant UI.
-		c, err := env.ClientStore.GetClientByID(sub.GetAuthorizationRequest().ClientID)
-		if err != nil {
-			// Report and log error
-			env.Logger.Error("Failed to get client from authorization request", slog.String("error", err.Error()))
-
-			// Basic error handling
-			err := AuthErrorResponse{
-				ErrorType:        "invalid_request",
-				ErrorDescription: err.Error(),
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusBadRequest)
-			h.ErrorPageTemplate.Execute(w, struct {
-				Title            string
-				ErrorDescription string
-				RedirectURI      string
-			}{
-				Title:            err.ErrorType,
-				ErrorDescription: err.ErrorDescription,
-				RedirectURI:      sub.GetAuthorizationRequest().RedirectURI + "?" + err.ToQueryValues().Encode(),
-			})
-			return
-		}
-
-		// Access token scope is a list of space-delimited case-sensitive strings.
-		// https://datatracker.ietf.org/doc/html/rfc6749#section-3.3
-		//
-		// TODO: add a way to map the scope to a list of user readable
-		//       explainations of the machine-readable scope.
-		scopes := strings.Split(sub.GetAuthorizationRequest().Scope, " ")
-
-		// Render the scope authorization page
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusOK)
-		h.ScopeAuthorizationPageTemplate.Execute(w, struct {
-			Action string
-			Client Client
-			Scopes []string
-		}{
-			Action: env.AuthEndpoint,
-			Client: c,
-			Scopes: scopes,
-		})
-		return
-	case AuthorizationSubmission:
-		// Check form submission result, then the pending token session,
-		// If everything is legit, redirect back to client with proper
-		// response / error.
-		resp, err := HandleAuthorizationSubmission(r.Context(), sub, w)
-		if err != nil {
-			// Report and log error
-			env.Logger.Error("Failed to handle authorization submission", slog.String("error", err.Error()))
-
-			// Basic error handling
-			err := AuthErrorResponse{
-				ErrorType:        "invalid_request",
-				ErrorDescription: err.Error(),
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusBadRequest)
-			h.ErrorPageTemplate.Execute(w, struct {
-				Title            string
-				ErrorDescription string
-				RedirectURI      string
-			}{
-				Title:            err.ErrorType,
-				ErrorDescription: err.ErrorDescription,
-				RedirectURI:      sub.GetAuthorizationRequest().RedirectURI + "?" + err.ToQueryValues().Encode(),
-			})
-			return
-		}
-		if resp == nil {
-			// Report and log error
-			env.Logger.Error("Failed to handle authorization submission", slog.String("error", "nil response"))
-
-			// Basic error handling
-			err := AuthErrorResponse{
-				ErrorType:        "invalid_request",
-				ErrorDescription: "Failed to handle authorization submission",
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusBadRequest)
-			h.ErrorPageTemplate.Execute(w, struct {
-				Title            string
-				ErrorDescription string
-				RedirectURI      string
-			}{
-				Title:            err.ErrorType,
-				ErrorDescription: err.ErrorDescription,
-				RedirectURI:      sub.GetAuthorizationRequest().RedirectURI + "?" + err.ToQueryValues().Encode(),
-			})
-			return
-		}
-
-		// Redirect to the client with the authorization response
-		q := resp.ToQueryValues()
-		if resp.AccessTokenResponse != nil || resp.AccessTokenErrorResponse != nil {
-			// For implicit flow, the access token is returned in the URL fragment.
-			w.Header().Set("Location",
-				sub.GetAuthorizationRequest().RedirectURI+"#"+q.Encode(),
-			)
-			return
-		}
-
-		w.Header().Set("Location",
-			sub.GetAuthorizationRequest().RedirectURI+"?"+q.Encode(),
-		)
-		return
-	default:
-		// Unknown submission type
-		// Report and log error
-		env.Logger.Error("Unknown submission type", slog.String("type", sub.GetType().String()))
-
-		// Basic error handling
-		err := AuthErrorResponse{
-			ErrorType:        "invalid_request",
-			ErrorDescription: "Unknown submission type",
-		}
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusBadRequest)
-		h.ErrorPageTemplate.Execute(w, struct {
-			Title            string
-			ErrorDescription string
-			RedirectURI      string
-		}{
-			Title:            err.ErrorType,
-			ErrorDescription: err.ErrorDescription,
-			RedirectURI:      sub.GetAuthorizationRequest().RedirectURI + "?" + err.ToQueryValues().Encode(),
-		})
-		return
-	}
-
-}
-
-/*
-// HandleAuthenticationSubmission generates the proper authentication response
-// from the given request, client and user.
-func HandleAuthenticationSubmission(
-	ctx context.Context,
-	sub AuthSubmission,
-	w http.ResponseWriter,
-) (*AuthResponse, error) {
-	env := GetEnvironment(ctx)
-	if env == nil {
-		panic("Environment is not set in the context")
-	}
-	client := GetClient(ctx)
-	if client == nil {
-		return nil, fmt.Errorf("Client is not set in the context")
-	}
-	user := GetUser(ctx)
-	if user == nil {
-		return nil, fmt.Errorf("User is not set in the context")
-	}
-
-	return nil, fmt.Errorf("HandleAuthenticationSubmission not implemented")
-}
-*/
-
-// HandleAuthorizationRequest generates the proper authorization response
-// from the given request, client and user.
-//
-// Client and user are supposed to be already authenticated and validated.
-func HandleAuthorizationSubmission(
-	ctx context.Context,
-	sub AuthSubmission,
-	w http.ResponseWriter,
-) (*AuthResponse, error) {
-
-	env := GetEnvironment(ctx)
-	if env == nil {
-		panic("Environment is not set in the context")
-	}
-	client := GetClient(ctx)
-	if client == nil {
-		return nil, fmt.Errorf("Client is not set in the context")
-	}
-	user := GetUser(ctx)
-	if user == nil {
-		return nil, fmt.Errorf("User is not set in the context")
-	}
-	req := sub.GetAuthorizationRequest()
-
-	switch req.ResponseType {
-	case "code":
-		// Handle authorization code flow
-		// Generate authorization code
-		code, err := env.RandomGenerator.Generate(32)
-		if err != nil {
-			return nil, err
-		}
-
-		ps, err := env.TokenSessionStore.CreatePendingTokenSession(&TokenSessionRequest{
-			GrantType:           "authorization_code",
-			ClientID:            req.ClientID,
-			Code:                code,
-			CodeChallenge:       req.CodeChallenge,
-			CodeChallengeMethod: req.CodeChallengeMethod,
-			Scope:               req.Scope,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Generate response for authorization code flow
-		resp := &AuthResponse{
-			ResponseType: req.ResponseType,
-			Code:         ps.GetCode(),
-			State:        req.State,
-		}
-		return resp, nil
-
-	case "token":
-		ps, err := env.TokenSessionStore.CreatePendingTokenSession(&TokenSessionRequest{
-			GrantType: "implicit",
-			ClientID:  req.ClientID,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		sess, err := env.TokenSessionStore.PromotePendingTokenSession(ps)
-		if err != nil {
-			return nil, err
-		}
-
-		// Generate response for implicit flow
-		resp := &AuthResponse{
-			ResponseType: req.ResponseType,
-			AccessTokenResponse: &AccessTokenResponse{
-				AccessToken: sess.GetAccessToken(),
-				TokenType:   sess.GetTokenType(),
-				ExpiresIn:   CalculateExpiresIn(sess.GetAccessTokenExpiry()),
-				Scope:       sess.GetScope(),
-				State:       req.State,
-			},
-		}
-		return resp, nil
-	}
-
-	return nil, fmt.Errorf("unsupported response type: %s", req.ResponseType)
-}
-
-/*
-// AuthorizationEndpointResponseWriter is an interface that extends
-// http.ResponseWriter to provide additional functionality for
-// handling authorization responses in the OAuth 2.0 flow.
-//
-// It allows for the retrieval of the authorization response context,
-// which can be used to accumulate information about the authorization
-// request, user, and client during the authorization process.
-type AuthorizationEndpointResponseWriter interface {
-	http.ResponseWriter
-
-	// GetAuthResponseContext get the authorization context
-	// to furhter accumulate to or render output with.
-	GetAuthResponseContext() AuthResponseContext
-}
-
-// AuthResponseContext represents a context in the
-// OAuth 2.0 authentication / authorization process.
-//
-//  1. On first arrival at the authorization endpoint, a pending session
-//     is created with basic client information.
-//  2. After the user is authenticated, the user will be asked to
-//     authorize the application to access their data.
-//  3. After the user authorized the application, the pending session
-//     is promoted to a token session and the user is redirected back
-//     to the application with the authorization code or access token.
-//
-// The underlying implementation of the pending session should be
-// a pointer. So getting the AuthResponseContext and modifying it
-// allows other middleware / http.Handler to access the same context
-// information.
-type AuthResponseContext interface {
-	SetAuthorizationRequest(*AuthorizationRequest)
-
-	GetAuthorizationRequest() *AuthorizationRequest
-
-	SetAuthResponse(*AuthResponse)
-
-	GetAuthResponse() *AuthResponse
-
-	SetClient(Client)
-
-	GetClient() Client
-
-	SetUser(User)
-
-	GetUser() User
-
-	SetPendingTokenSession(PendingTokenSession)
-
-	GetPendingTokenSession() PendingTokenSession
-
-	SetError(error)
-
-	GetError() error
-}
-*/

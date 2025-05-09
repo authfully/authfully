@@ -8,6 +8,7 @@ const (
 	contextKeyEnvironment contextKey = iota
 	contextKeyClient
 	contextKeyUser
+	contextKeyAuthorizationRequest
 )
 
 // WithEnvironment is a function that stores the environment in the context.
@@ -53,4 +54,19 @@ func GetUser(ctx context.Context) User {
 		return nil
 	}
 	return user
+}
+
+// WithAuthorizationRequest is a function that stores the authorization request
+// in the context.
+func WithAuthorizationRequest(ctx context.Context, req *AuthorizationRequest) context.Context {
+	return context.WithValue(ctx, contextKeyAuthorizationRequest, req)
+}
+
+// GetAuthorizationRequest get authorization request from context
+func GetAuthorizationRequest(ctx context.Context) *AuthorizationRequest {
+	req, ok := ctx.Value(contextKeyAuthorizationRequest).(*AuthorizationRequest)
+	if !ok {
+		return nil
+	}
+	return req
 }
