@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -227,9 +229,60 @@ func DefaultAuthorizationRequestDecoder(r *http.Request) (*AuthorizationRequest,
 		return nil, fmt.Errorf("missing scope")
 	}
 
-	// TODO: improve validataion logics
+	// Validate that the redirect uri is a valid URI
+	parsedURI, err := url.Parse(req.RedirectURI)
+	if err != nil {
+		return nil, fmt.Errorf("invalid redirect_uri: %w", err)
+	}
+
+	// Check the scheme (must be http or https)
+	if parsedURI.Scheme != "http" && parsedURI.Scheme != "https" {
+		return nil, fmt.Errorf("invalid redirect_uri: scheme must be http or https")
+	}
+
+	// Check that the host is not empty
+	if parsedURI.Host == "" {
+		return nil, fmt.Errorf("invalid redirect_uri: missing host")
+	}
+
+	// Validate the format of req.Scope
+	// to spec, it need to be "space-delimited case sensitive strings"
+	//
+	//   scope       = scope-token *( SP scope-token )
+	//   scope-token = 1*( %x21 / %x23-5B / %x5D-7E )
+	//
+	// ref: https://datatracker.ietf.org/doc/html/rfc6749#section-3.3
+	scopes := strings.Fields(req.Scope)
+	if len(scopes) == 0 && req.Scope != "" { // Handles case where scope might be just spaces
+		return nil, fmt.Errorf("invalid scope: must be space-delimited strings")
+	}
+	for _, s := range scopes {
+		if !isValidScopeToken(s) {
+			return nil, fmt.Errorf("invalid scope token: %s", s)
+		}
+	}
+
+	// TODO: improve validataion logics for PKCE's code challenge and
+	// challenge method
 
 	return req, nil
+}
+
+// isValidScopeToken checks if a single scope token is valid according to RFC6749.
+// scope-token = 1*( %x21 / %x23-5B / %x5D-7E )
+func isValidScopeToken(token string) bool {
+	if len(token) == 0 {
+		return false
+	}
+	for _, r := range token {
+		if r == 0x20 || r == 0x22 || r == 0x5C { // SP, DQUOTE, BACKSLASH are not allowed
+			return false
+		}
+		if r < 0x21 || r > 0x7E { // Must be in VCHAR range
+			return false
+		}
+	}
+	return true
 }
 
 // SubmissionError is for commonly used submission status response.
