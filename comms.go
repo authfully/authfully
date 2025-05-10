@@ -146,6 +146,38 @@ func (e AuthErrorResponse) ToQueryValues() url.Values {
 	return v
 }
 
+// UserInterfaceWarning represents minor warning message.
+//
+// These warning message are shown to user in the UserInterfaceEndpointHandler.
+// Meant for things like "password not match" or similar messages that the
+// endpoint would shows to user but not severe enough to immediately fail the
+// authentication / authorization attempt.
+type UserInterfaceWarning struct {
+	Title       string
+	Description string
+	InnerError  error
+	Form        url.Values
+}
+
+// Error implements the error interface
+func (e UserInterfaceWarning) Error() string {
+	title := e.Title
+	if title == "" {
+		title = "Warning"
+	}
+
+	desc := e.Description
+	if e.Description == "" {
+		if e.InnerError != nil {
+			desc = e.InnerError.Error()
+		} else {
+			desc = "Something is wrong with your input"
+		}
+	}
+
+	return fmt.Sprintf("%s: %s", title, desc)
+}
+
 // AccessTokenRequest represents an OAuth 2.0 token request.
 //
 // Represets any request to the token endpoint.
