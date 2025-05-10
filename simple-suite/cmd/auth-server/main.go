@@ -144,11 +144,54 @@ func main() {
 			authfully.NewUserInterfaceEndpointHandler(
 				authfully.AuthenticationPageHTML,
 				authfully.SubmissionHandlerFunc(func(r *http.Request) (ctx context.Context, err error) {
-					return r.Context(), nil
+					env := authfully.GetEnvironment(r.Context())
+					if env == nil {
+						panic("Environment not found")
+					}
+
+					// Decode the authorization submission
+					ar, err := env.AuthorizationRequestDecoder.Decode(r)
+					if err != nil {
+						return r.Context(), err
+					}
+					ctx = authfully.WithAuthorizationRequest(r.Context(), ar)
+
+					// Handle a simple form submission
+					if r.Method == "POST" {
+						r.ParseForm() // Parse the form data
+						email := r.Form.Get("email")
+						password := r.Form.Get("password")
+						//nounce := r.Form.Get("nounce")
+
+						// Check if the user can be found in the user store
+						u, err := env.UserStore.GetUserByLoginName(email)
+						if err != nil {
+							return ctx, &authfully.UserInterfaceWarning{
+								Description: "User with this email not found",
+								InnerError:  err,
+								Form:        r.Form,
+							}
+						}
+
+						// Check if the password matches the found user
+						if err = u.CheckPassword(password); err != nil {
+							return ctx, &authfully.UserInterfaceWarning{
+								Description: "Password is not correct",
+								InnerError:  err,
+								Form:        r.Form,
+							}
+						}
+					}
+
+					// TODO: handle session / cookie for storing the ar
+
+					return ctx, nil
 				}),
 			),
 		),
 	)
+
+	// TODO: a specific authorization page endpoint to be added for scope approval
 
 	m.HandleFunc(tokenEndpointPath, func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("Received request for token endpoint")
