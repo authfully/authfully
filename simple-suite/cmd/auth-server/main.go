@@ -72,25 +72,7 @@ func getLoggers(debug bool) (*slog.Logger, gormlogger.Interface) {
 	return slogLogger, gormLogger
 }
 
-func main() {
-	// Set up a temporary logger for the initial steps
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	logger.Info("starting")
-
-	// Load if .env exists
-	if _, err := os.Stat(".env"); err == nil {
-		logger.Info("Loading .env file")
-		err := godotenv.Load()
-		if err != nil {
-			logger.Error("Error loading .env file", "error", err)
-			panic(err)
-		}
-	}
-
-	// Check debug flag from environment variable
-	debugFlag := strings.ToLower(os.Getenv("DEBUG"))
-	logger, gormLogger := getLoggers(debugFlag == "true" || debugFlag == "1")
-
+func serve(logger *slog.Logger, gormLogger gormlogger.Interface) {
 	// Parse the port number from the environment variable
 	addr, err := authfullysimple.ParseAddress(os.Getenv("PORT"), defaultPort)
 	if err != nil {
@@ -213,4 +195,26 @@ func main() {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 	logger.Info("Server stopped")
+}
+
+func main() {
+	// Set up a temporary logger for the initial steps
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger.Info("starting")
+
+	// Load if .env exists
+	if _, err := os.Stat(".env"); err == nil {
+		logger.Info("Loading .env file")
+		err := godotenv.Load()
+		if err != nil {
+			logger.Error("Error loading .env file", "error", err)
+			panic(err)
+		}
+	}
+
+	// Check debug flag from environment variable
+	debugFlag := strings.ToLower(os.Getenv("DEBUG"))
+	logger, gormLogger := getLoggers(debugFlag == "true" || debugFlag == "1")
+
+	serve(logger, gormLogger)
 }
