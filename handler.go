@@ -20,16 +20,84 @@ const (
 <html>
 <head>
 	<meta charset="utf-8">
-	<title>Login</title>
+	<title>{{- if .Title }}{{ .Title }}{{- else }}Login{{- end}}</title>
+	<style>
+		.user-authentication {
+			display: block;
+			max-width: 400px;
+			width: calc(100% - 2rem);
+			margin: 0 auto;
+		}
+		.user-authentication__form {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem 0;
+		}
+		.user-authentication__form__input {
+			padding: 0.5rem;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			font-size: 1.2rem;
+		}
+		.user-authentication__form__button {
+			padding: 0.5rem;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			font-size: 1.2rem;
+			cursor: pointer;
+		}
+		.authentication__form__warning {
+			background-color: #f8d7da;
+			color: #721c24;
+			padding: 1rem;
+			border: 1px solid #f5c6cb;
+			border-radius: 4px;
+			margin-bottom: 1rem;
+		}
+		.authentication__form__warning h2 {
+			margin: 0;
+			font-size: 1.2rem;
+			font-weight: bold;
+		}
+		.authentication__form__warning p {
+			margin: 0;
+			font-size: 1rem;
+		}
+	</style>
 </head>
 <body>
-	<h1>Login</h1>
-	<form method="POST" action="{{ .Action }}">
-		<p>Login</p>
-		<input type="text" name="email" placeholder="Email" value="{{- if .Email }}{{ .Email }}{{- end }}" required>
-		<input type="password" name="password" placeholder="Password" required>
-		<button type="submit">Login</button>
-	</form>
+	<main class="user-authentication">
+		<h1>{{- if .Title }}{{ .Title }}{{- else }}Login{{- end}}</h1>
+		{{- if .Warning }}
+			<div class="authentication__form__warning">
+				{{- if .Warning.Title }}
+					<h2>{{ .Warning.Title }}</h2>
+				{{- end }}
+				<p>{{ .Warning.Description }}</p>
+			</div>
+		{{- end }}
+		<form method="POST" action="{{ .Action }}" class="user-authentication__form">
+			<input
+				class="user-authentication__form__input"
+				type="text"
+				name="email"
+				placeholder="Email"
+				value="{{- if .Form }}{{ .Form.Get "email" }}{{- else  }}{{- end }}"
+				required
+			>
+			<input
+				class="user-authentication__form__input"
+				type="password"
+				name="password"
+				placeholder="Password"
+				required
+			>
+			<button
+				class="user-authentication__form__button"
+				type="submit"
+			>Login</button>
+		</form>
+	</main>
 </body>
 </html>
 `
@@ -378,7 +446,11 @@ func (h UserInterfaceEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		// No submission yet. Show the user interface.
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		h.UserInterfacePageTemplate.Execute(w, nil)
+		h.UserInterfacePageTemplate.Execute(w, UserInterfacePageFields{
+			Title:      "Login",
+			ButtonText: "Login",
+			Action:     r.URL.Path,
+		})
 		return
 	}
 	if err == SubmissionOK {
@@ -386,30 +458,50 @@ func (h UserInterfaceEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Get the authorization request from context for proper error display.
-	ar := GetAuthorizationRequest(ctx)
-	if ar == nil {
-		// Report and log error
+	// Show user interface with warning message, if any.
+	if warning, ok := err.(*UserInterfaceWarning); ok {
 		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusBadRequest)
-		logger.Error(
-			"unable to retrieve the authorization request from context",
+		w.WriteHeader(http.StatusOK)
+		logger.Warn(
+			"failed to handle user form submission",
 			"ip", r.RemoteAddr,
+			"error", warning,
 		)
-		h.ErrorPageTemplate.Execute(w, struct {
-			Title            string
-			ErrorDescription string
-			RedirectURI      string
-		}{
-			Title:            "Error",
-			ErrorDescription: "unable to retrieve the authorization request from context",
-			RedirectURI:      "",
+		h.UserInterfacePageTemplate.Execute(w, UserInterfacePageFields{
+			Title:      "Login",
+			ButtonText: "Login",
+			Action:     r.URL.Path,
+			Form:       warning.Form,
+			Warning:    warning,
 		})
 		return
 	}
 
 	// Handle AuthErrorResponse properly
 	if authErr, ok := err.(*AuthErrorResponse); ok {
+
+		// Get the authorization request from context for proper error display.
+		ar := GetAuthorizationRequest(ctx)
+		if ar == nil {
+			// Report and log error
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusBadRequest)
+			logger.Error(
+				"unable to retrieve the authorization request from context",
+				"ip", r.RemoteAddr,
+			)
+			h.ErrorPageTemplate.Execute(w, struct {
+				Title            string
+				ErrorDescription string
+				RedirectURI      string
+			}{
+				Title:            "Error",
+				ErrorDescription: "unable to retrieve the authorization request from context",
+				RedirectURI:      "",
+			})
+			return
+		}
+
 		w.Header().Set("Content-Type", "text/html")
 		switch authErr.ErrorType {
 		case "server_error":
@@ -466,4 +558,15 @@ func NewUserInterfaceEndpointHandler(
 		ErrorPageTemplate:         ErrorPageTemplate,
 		SubmissionHandler:         sh,
 	}
+}
+
+// UserInterfacePageFields is a generic struct that holds the warning
+// message and the form data for displaying in the user interface.
+type UserInterfacePageFields struct {
+	Title      string
+	ButtonText string
+	Action     string
+	Warning    *UserInterfaceWarning
+	Form       url.Values
+	Extra      map[string]any
 }
