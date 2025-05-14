@@ -57,7 +57,7 @@ func (c *DefaultClient) CheckSecret(secret string) error {
 // SetSecret sets the secret for the client by hashing it with a salt.
 func (c *DefaultClient) SetSecret(secret string) error {
 	// Hardcode hash method to sha256
-	algo := "bcrypt"
+	algo := "argon2id"
 
 	// Hash the secret with the salt
 	hash, err := HashPassword(secret, algo)

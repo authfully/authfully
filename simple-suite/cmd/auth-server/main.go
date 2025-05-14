@@ -286,15 +286,10 @@ func main() {
 							},
 						},
 						Action: func(c *cli.Context) error {
+							var err error
+
 							// Initialize the database
-							db, err := gorm.Open(sqlite.Open("auth-server.sqlite3"), &gorm.Config{
-								Logger: gormLogger,
-							})
-							if err != nil {
-								logger.Error("Failed to connect database", "error", err)
-								panic(err)
-							}
-							logger.Info("connected to database")
+							db := getDatabase("auth-server.sqlite3", gormLogger, logger)
 
 							// Start transaction
 							tx := db.Begin()
@@ -328,9 +323,14 @@ func main() {
 								tx.Rollback()
 								return err
 							}
-							client.SetSecret(secret)
-							err = cs.Update(client.ID, client)
-							if err != nil {
+
+							if err = client.SetSecret(secret); err != nil {
+								logger.Error("Failed to set client secret", "error", err)
+								tx.Rollback()
+								return err
+							}
+
+							if err = cs.Update(client.ID, client); err != nil {
 								logger.Error("Failed to update client with secret", "error", err)
 								tx.Rollback()
 								return err
@@ -341,6 +341,48 @@ func main() {
 
 							// Client created successfully
 							logger.Info("Client created", "client", *client, "client_secret", secret)
+							return nil
+						},
+					},
+					{
+						Name: "check-secret",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "id",
+								Usage:    "Client ID of the client",
+								Required: true,
+							},
+							&cli.StringFlag{
+								Name:     "secret",
+								Usage:    "Client secret of the client",
+								Required: true,
+							},
+						},
+						Action: func(c *cli.Context) error {
+							// Initialize the database
+							db := getDatabase("auth-server.sqlite3", gormLogger, logger)
+
+							// Create a new client store
+							cs := authfullysimple.NewClientStore(db)
+
+							// Check if the client exists
+							clientID := c.String("id")
+							client, err := cs.GetClientByID(clientID)
+							if err != nil {
+								logger.Error("Failed to get client by ID", "error", err)
+								return err
+							}
+
+							// Check if the client secret is correct
+							clientSecret := c.String("secret")
+							err = client.CheckSecret(clientSecret)
+							if err != nil {
+								logger.Error("Failed to check client secret", "error", err)
+								return err
+							}
+
+							// Client secret is correct
+							logger.Info("Client secret is correct", "client_id", client.GetID())
 							return nil
 						},
 					},
