@@ -1,7 +1,6 @@
 package authfullysimple
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"strconv"
@@ -13,16 +12,6 @@ import (
 const (
 	defaultBcryptCost = bcrypt.DefaultCost
 )
-
-// GenerateSalt generates a random salt for the password hash.
-func GenerateSalt() string {
-	bytes := make([]byte, 32)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		panic(fmt.Sprintf("failed to generate salt: %v", err))
-	}
-	return base64.URLEncoding.EncodeToString(bytes)
-}
 
 // GenerateClientSecret generates a random secret for the client.
 func GenerateClientSecret(clientId string) (string, error) {
