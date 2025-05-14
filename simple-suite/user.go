@@ -11,11 +11,10 @@ import (
 // DefaultUser is a struct that represents a user in the system.
 // It implements authfully.DefaultUser interface.
 type DefaultUser struct {
-	ID                 string `json:"ID" gorm:"primaryKey,uniqueIndex"`
-	Email              string `json:"Email" gorm:"uniqueIndex"`
-	PasswordHash       string `json:"-"`
-	PasswordHashSalt   string `json:"-"`
-	PasswordHashMethod string `json:"-"`
+	ID               string `json:"ID" gorm:"primaryKey,uniqueIndex"`
+	Email            string `json:"Email" gorm:"uniqueIndex"`
+	PasswordHash     string `json:"-"`
+	PasswordHashAlgo string `json:"-"`
 }
 
 // TableName returns the name of the table in the database.
@@ -26,21 +25,23 @@ func (u *DefaultUser) TableName() string {
 
 // CheckPassword checks if the given password matches the stored password hash.
 func (u *DefaultUser) CheckPassword(password string) error {
-	return CheckPassword(password, u.PasswordHash, u.PasswordHashSalt, u.PasswordHashMethod)
+	return CheckPassword(password, u.PasswordHash, u.PasswordHashAlgo)
 }
 
 // SetPassword sets the password for the user by hashing it with a salt.
 func (u *DefaultUser) SetPassword(password string) error {
 	// Hardcode hash method to sha256
-	hashMethod := "sha256"
-	// Generate a new salt for the password hash
-	salt := GenerateSalt()
+	algo := "bcrypt"
+
 	// Hash the password with the salt
-	hash := HashPassword(password, salt, hashMethod)
+	hash, err := HashPassword(password, algo)
+	if err != nil {
+		return err
+	}
+
 	// Set the password hash and salt
 	u.PasswordHash = hash
-	u.PasswordHashSalt = salt
-	u.PasswordHashMethod = hashMethod
+	u.PasswordHashAlgo = algo
 	return nil
 }
 

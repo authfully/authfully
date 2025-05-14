@@ -83,11 +83,8 @@ func TestDefaultClientStore(t *testing.T) {
 	if client.SecretHash == "" {
 		t.Errorf("Client secret hash should not be empty after creation")
 	}
-	if client.SecretHashMethod == "" {
+	if client.SecretHashAlgo == "" {
 		t.Errorf("Client secret hash method should not be empty after creation")
-	}
-	if client.SecretHashSalt == "" {
-		t.Errorf("Client secret hash salt should not be empty after creation")
 	}
 	if client.CheckSecret(secretToUse) != nil {
 		t.Errorf("Client secret check failed after creation")
@@ -112,11 +109,8 @@ func TestDefaultClientStore(t *testing.T) {
 	if want, have := client.SecretHash, castedRetrivedClient.SecretHash; want != have {
 		t.Errorf("Expected client secret hash %s, got %s", want, have)
 	}
-	if want, have := client.SecretHashMethod, castedRetrivedClient.SecretHashMethod; want != have {
+	if want, have := client.SecretHashAlgo, castedRetrivedClient.SecretHashAlgo; want != have {
 		t.Errorf("Expected client secret hash method %s, got %s", want, have)
-	}
-	if want, have := client.SecretHashSalt, castedRetrivedClient.SecretHashSalt; want != have {
-		t.Errorf("Expected client secret hash salt %s, got %s", want, have)
 	}
 	if want, have := client.UserID, castedRetrivedClient.UserID; want != have {
 		t.Errorf("Expected client user ID %s, got %s", want, have)

@@ -14,11 +14,10 @@ import (
 // It implements authfully.DefaultClient interface.
 type DefaultClient struct {
 	gorm.Model
-	ID               string `json:"ID" gorm:"primaryKey,uniqueIndex"`
-	Name             string `json:"Name"`
-	SecretHash       string `json:"-"`
-	SecretHashSalt   string `json:"-"`
-	SecretHashMethod string `json:"-"`
+	ID             string `json:"ID" gorm:"primaryKey,uniqueIndex"`
+	Name           string `json:"Name"`
+	SecretHash     string `json:"-"`
+	SecretHashAlgo string `json:"-"`
 
 	// UserID stores the owner of the client.
 	UserID string `json:"UserID"`
@@ -52,21 +51,23 @@ func (c *DefaultClient) GetName() string {
 // to see if it is valid.
 // Implements the authfully.Client interface.
 func (c *DefaultClient) CheckSecret(secret string) error {
-	return CheckPassword(secret, c.SecretHash, c.SecretHashSalt, c.SecretHashMethod)
+	return CheckPassword(secret, c.SecretHash, c.SecretHashAlgo)
 }
 
 // SetSecret sets the secret for the client by hashing it with a salt.
 func (c *DefaultClient) SetSecret(secret string) error {
 	// Hardcode hash method to sha256
-	hashMethod := "sha256"
-	// Generate a new salt for the secret hash
-	salt := GenerateSalt()
+	algo := "bcrypt"
+
 	// Hash the secret with the salt
-	hash := HashPassword(secret, salt, hashMethod)
+	hash, err := HashPassword(secret, algo)
+	if err != nil {
+		return err
+	}
+
 	// Set the secret hash and salt
 	c.SecretHash = hash
-	c.SecretHashSalt = salt
-	c.SecretHashMethod = hashMethod
+	c.SecretHashAlgo = algo
 	return nil
 }
 

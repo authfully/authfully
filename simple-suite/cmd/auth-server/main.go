@@ -291,8 +291,15 @@ func main() {
 								return err
 							}
 
-							// Generate a client secret
-							secret := authfullysimple.GenerateClientSecret(client.ID, authfullysimple.GenerateSalt())
+							// Generate a client secret with some hash method. The secret itself
+							// can be verified with the client ID.
+							// FIXME: can be done with some encryption method instead of hashing.
+							secret, err := authfullysimple.GenerateClientSecret(client.ID)
+							if err != nil {
+								logger.Error("Failed to generate client secret", "error", err)
+								tx.Rollback()
+								return err
+							}
 							client.SetSecret(secret)
 							err = cs.Update(client.ID, client)
 							if err != nil {

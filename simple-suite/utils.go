@@ -2,11 +2,16 @@ package authfullysimple
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	defaultBcryptCost = bcrypt.DefaultCost
 )
 
 // GenerateSalt generates a random salt for the password hash.
@@ -20,44 +25,43 @@ func GenerateSalt() string {
 }
 
 // GenerateClientSecret generates a random secret for the client.
-func GenerateClientSecret(clientId, salt string) string {
-	method := "sha256"
-	return HashPassword(clientId, salt, method) + ":" + method + "!" + salt // FIXME: better way to do this
+func GenerateClientSecret(clientId string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(clientId), defaultBcryptCost)
+	return base64.URLEncoding.EncodeToString(hash), err
 }
 
-func HashPassword(password, salt, method string) string {
+// HashPassword hashes the password using the specified algo.
+func HashPassword(password, algo string) (string, error) {
 	// Use SHA256 hashing algorithm
 	// and return the base64 encoded hash
-	switch strings.ToLower(method) {
-	case "sha256":
-		hasher := sha256.New()
-		hasher.Write([]byte(password))
-		hasher.Write([]byte(salt))
-		return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+	switch strings.ToLower(algo) {
+	case "bcrypt":
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), defaultBcryptCost)
+		return base64.URLEncoding.EncodeToString(hash), err
 	default:
 		// This should not happen. Immediately panic if it does.
-		panic(fmt.Sprintf("unsupported hash method: %s", method))
+		panic(fmt.Sprintf("unsupported hash algo: %s", algo))
 	}
 }
 
-func CheckPassword(password, hash, salt, method string) error {
+// CheckPassword checks if the password matches the hash using the specified algo.
+func CheckPassword(password, hash, algo string) error {
 	// Use SHA256 hashing algorithm
 	// and compare the hash with the stored password hash
-	var passwordHash string
-	switch strings.ToLower(method) {
-	case "sha256":
-		hasher := sha256.New()
-		hasher.Write([]byte(password))
-		hasher.Write([]byte(salt))
-		passwordHash = base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+	switch algo {
+	case "bcrypt":
+		bcryptHash, err := base64.URLEncoding.DecodeString(hash)
+		if err != nil {
+			return fmt.Errorf("failed to decode bcrypt hash: %v", err)
+		}
+		err = bcrypt.CompareHashAndPassword(bcryptHash, []byte(password))
+		if err != nil {
+			return fmt.Errorf("password does not match: %v", err)
+		}
+		return nil
 	default:
-		return fmt.Errorf("unsupported hash method: %s", method)
+		return fmt.Errorf("unsupported hash algo: %s", algo)
 	}
-
-	if passwordHash != hash {
-		return fmt.Errorf("password does not match")
-	}
-	return nil
 }
 
 // ParseAddress parses the port string and returns a formatted address.
