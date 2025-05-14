@@ -78,7 +78,6 @@ func serve(
 	us authfully.UserStore,
 	cs authfully.ClientStore,
 	logger *slog.Logger,
-	gormLogger gormlogger.Interface,
 ) {
 
 	// Create an environment
@@ -173,6 +172,42 @@ func serve(
 	logger.Info("Server stopped")
 }
 
+// getDatabase initializes the database connection
+func getDatabase(dsn string, gormLogger gormlogger.Interface, logger *slog.Logger) *gorm.DB {
+	// Initialize the database
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: gormLogger,
+	})
+	if err != nil {
+		logger.Error("Failed to connect database", "error", err)
+		panic(err)
+	}
+	logger.Info("connected to database")
+	return db
+}
+
+// initializeStores initializes the stores object and the underlying tables.
+// Do automigration of the tables.
+func initializeStores(db *gorm.DB, logger *slog.Logger) (authfully.UserStore, authfully.ClientStore) {
+	logger.Info("database migration started")
+
+	// Initialize the user store
+	us := authfullysimple.NewUserStore(db)
+	if err := us.AutoMigrate(); err != nil {
+		log.Fatalf("Failed to migrate user store: %v", err)
+	}
+
+	// Initialize the client store
+	cs := authfullysimple.NewClientStore(db)
+	if err := cs.AutoMigrate(); err != nil {
+		log.Fatalf("Failed to migrate client store: %v", err)
+	}
+
+	logger.Info("database migration completed")
+
+	return us, cs
+}
+
 func main() {
 	// Set up a temporary logger for the initial steps
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -207,31 +242,24 @@ func main() {
 					}
 
 					// Initialize the database
-					db, err := gorm.Open(sqlite.Open("auth-server.sqlite3"), &gorm.Config{
-						Logger: gormLogger,
-					})
-					if err != nil {
-						logger.Error("Failed to connect database", "error", err)
-						panic(err)
-					}
-					logger.Info("connected to database")
+					db := getDatabase("auth-server.sqlite3", gormLogger, logger)
 
-					// Migrate the schema
-					logger.Info("migrating database schema")
-					cs := authfullysimple.NewClientStore(db)
-					if err := cs.AutoMigrate(); err != nil {
-						logger.Error("Failed to migrate client store", "error", err)
-						panic(err)
-					}
-					us := authfullysimple.NewUserStore(db)
-					if err := us.AutoMigrate(); err != nil {
-						logger.Error("Failed to migrate user store", "error", err)
-						panic(err)
-					}
-					logger.Info("Migrated database schema")
+					// Initialize the stores
+					us, cs := initializeStores(db, logger)
 
 					// Start the server
-					serve(addr, us, cs, logger, gormLogger)
+					serve(addr, us, cs, logger)
+					return nil
+				},
+			},
+			{
+				Name: "migrate",
+				Action: func(c *cli.Context) error {
+					// Initialize the database
+					db := getDatabase("auth-server.sqlite3", gormLogger, logger)
+
+					// Initialize the stores
+					initializeStores(db, logger)
 					return nil
 				},
 			},
