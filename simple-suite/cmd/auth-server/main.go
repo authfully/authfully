@@ -13,6 +13,7 @@ import (
 	"github.com/authfully/authfully"
 	authfullysimple "github.com/authfully/authfully/simple-suite"
 	"github.com/joho/godotenv"
+	cli "github.com/urfave/cli/v2"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -72,38 +73,13 @@ func getLoggers(debug bool) (*slog.Logger, gormlogger.Interface) {
 	return slogLogger, gormLogger
 }
 
-func serve(logger *slog.Logger, gormLogger gormlogger.Interface) {
-	// Parse the port number from the environment variable
-	addr, err := authfullysimple.ParseAddress(os.Getenv("PORT"), defaultPort)
-	if err != nil {
-		logger.Error("Invalid port number", "error", err)
-		panic(err)
-	}
-
-	// Initialize the database
-	db, err := gorm.Open(sqlite.Open("auth-server.sqlite3"), &gorm.Config{
-		Logger: gormLogger,
-	})
-
-	if err != nil {
-		logger.Error("Failed to connect database", "error", err)
-		panic(err)
-	}
-	logger.Info("connected to database")
-
-	// Migrate the schema
-	logger.Info("migrating database schema")
-	cs := authfullysimple.NewClientStore(db)
-	if err := cs.AutoMigrate(); err != nil {
-		logger.Error("Failed to migrate client store", "error", err)
-		panic(err)
-	}
-	us := authfullysimple.NewUserStore(db)
-	if err := us.AutoMigrate(); err != nil {
-		logger.Error("Failed to migrate user store", "error", err)
-		panic(err)
-	}
-	logger.Info("Migrated database schema")
+func serve(
+	addr string,
+	us authfully.UserStore,
+	cs authfully.ClientStore,
+	logger *slog.Logger,
+	gormLogger gormlogger.Interface,
+) {
 
 	// Create an environment
 	env := &authfully.Environment{
@@ -216,5 +192,177 @@ func main() {
 	debugFlag := strings.ToLower(os.Getenv("DEBUG"))
 	logger, gormLogger := getLoggers(debugFlag == "true" || debugFlag == "1")
 
-	serve(logger, gormLogger)
+	(&cli.App{
+		Name:  "auth-server",
+		Usage: "A simple OAuth 2.0 server",
+		Commands: []*cli.Command{
+			{
+				Name: "serve",
+				Action: func(c *cli.Context) error {
+					// Parse the port number from the environment variable
+					addr, err := authfullysimple.ParseAddress(os.Getenv("PORT"), defaultPort)
+					if err != nil {
+						logger.Error("Invalid port number", "error", err)
+						panic(err)
+					}
+
+					// Initialize the database
+					db, err := gorm.Open(sqlite.Open("auth-server.sqlite3"), &gorm.Config{
+						Logger: gormLogger,
+					})
+					if err != nil {
+						logger.Error("Failed to connect database", "error", err)
+						panic(err)
+					}
+					logger.Info("connected to database")
+
+					// Migrate the schema
+					logger.Info("migrating database schema")
+					cs := authfullysimple.NewClientStore(db)
+					if err := cs.AutoMigrate(); err != nil {
+						logger.Error("Failed to migrate client store", "error", err)
+						panic(err)
+					}
+					us := authfullysimple.NewUserStore(db)
+					if err := us.AutoMigrate(); err != nil {
+						logger.Error("Failed to migrate user store", "error", err)
+						panic(err)
+					}
+					logger.Info("Migrated database schema")
+
+					// Start the server
+					serve(addr, us, cs, logger, gormLogger)
+					return nil
+				},
+			},
+			{
+				Name: "client",
+				Subcommands: []*cli.Command{
+					{
+						Name: "create",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "name",
+								Usage:    "Name of the client",
+								Required: true,
+							},
+							&cli.StringSliceFlag{
+								Name:     "redirect-uri",
+								Usage:    "Redirect URI of the client. Can be specified multiple times.",
+								Required: true,
+							},
+							&cli.StringSliceFlag{
+								Name:     "scope",
+								Usage:    "Valid scope of the client. Can be specified multiple times.",
+								Required: true,
+							},
+						},
+						Action: func(c *cli.Context) error {
+							// Initialize the database
+							db, err := gorm.Open(sqlite.Open("auth-server.sqlite3"), &gorm.Config{
+								Logger: gormLogger,
+							})
+							if err != nil {
+								logger.Error("Failed to connect database", "error", err)
+								panic(err)
+							}
+							logger.Info("connected to database")
+
+							// Start transaction
+							tx := db.Begin()
+
+							// Create a new client store
+							cs := authfullysimple.NewClientStore(tx)
+
+							// Add a new client
+							name := c.String("name")
+							redirectURIs := c.StringSlice("redirect-uri")
+							scopes := c.StringSlice("scope")
+							client := &authfullysimple.DefaultClient{
+								Name:         name,
+								RedirectURIs: redirectURIs,
+								Scopes:       scopes,
+							}
+
+							// Create a new client
+							err = cs.Create(client)
+							if err != nil {
+								logger.Error("Failed to create client", "error", err)
+								return err
+							}
+
+							// Generate a client secret
+							secret := authfullysimple.GenerateClientSecret(client.ID, authfullysimple.GenerateSalt())
+							client.SetSecret(secret)
+							err = cs.Update(client.ID, client)
+							if err != nil {
+								logger.Error("Failed to update client with secret", "error", err)
+								tx.Rollback()
+								return err
+							}
+
+							// Commit the transaction
+							tx.Commit()
+
+							// Client created successfully
+							logger.Info("Client created", "client", *client, "client_secret", secret)
+							return nil
+						},
+					},
+				},
+			},
+			{
+				Name: "user",
+				Subcommands: []*cli.Command{
+					{
+						Name: "create",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "email",
+								Usage:    "Email of the user",
+								Required: true,
+							},
+							&cli.StringFlag{
+								Name:     "password",
+								Usage:    "Password of the user",
+								Required: true,
+							},
+						},
+						Action: func(c *cli.Context) error {
+							// Initialize the database
+							db, err := gorm.Open(sqlite.Open("auth-server.sqlite3"), &gorm.Config{
+								Logger: gormLogger,
+							})
+							if err != nil {
+								logger.Error("Failed to connect database", "error", err)
+								panic(err)
+							}
+							logger.Info("connected to database")
+
+							// Create a new user store
+							us := authfullysimple.NewUserStore(db)
+
+							// Add a new user
+							email := c.String("email")
+							password := c.String("password")
+							user := &authfullysimple.DefaultUser{
+								Email: email,
+							}
+							user.SetPassword(password)
+
+							err = us.Create(user)
+							if err != nil {
+								logger.Error("Failed to create user", "error", err)
+								return err
+							}
+
+							// User created successfully
+							logger.Info("User created", "user", *user)
+							return nil
+						},
+					},
+				},
+			},
+		},
+	}).Run(os.Args)
 }

@@ -9,13 +9,20 @@ import (
 	"strings"
 )
 
-func generateSalt() string {
+// GenerateSalt generates a random salt for the password hash.
+func GenerateSalt() string {
 	bytes := make([]byte, 32)
 	_, err := rand.Read(bytes)
 	if err != nil {
 		panic(fmt.Sprintf("failed to generate salt: %v", err))
 	}
 	return base64.URLEncoding.EncodeToString(bytes)
+}
+
+// GenerateClientSecret generates a random secret for the client.
+func GenerateClientSecret(clientId, salt string) string {
+	method := "sha256"
+	return HashPassword(clientId, salt, method) + ":" + method + "!" + salt // FIXME: better way to do this
 }
 
 func HashPassword(password, salt, method string) string {

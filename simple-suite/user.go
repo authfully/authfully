@@ -11,8 +11,8 @@ import (
 // DefaultUser is a struct that represents a user in the system.
 // It implements authfully.DefaultUser interface.
 type DefaultUser struct {
-	ID                 string `json:"ID"`
-	Email              string `json:"Email"`
+	ID                 string `json:"ID" gorm:"primaryKey,uniqueIndex"`
+	Email              string `json:"Email" gorm:"uniqueIndex"`
 	PasswordHash       string `json:"-"`
 	PasswordHashSalt   string `json:"-"`
 	PasswordHashMethod string `json:"-"`
@@ -34,7 +34,7 @@ func (u *DefaultUser) SetPassword(password string) error {
 	// Hardcode hash method to sha256
 	hashMethod := "sha256"
 	// Generate a new salt for the password hash
-	salt := generateSalt()
+	salt := GenerateSalt()
 	// Hash the password with the salt
 	hash := HashPassword(password, salt, hashMethod)
 	// Set the password hash and salt

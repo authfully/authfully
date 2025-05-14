@@ -14,7 +14,7 @@ import (
 // It implements authfully.DefaultClient interface.
 type DefaultClient struct {
 	gorm.Model
-	ID               string `json:"ID" gorm:"primaryKey"`
+	ID               string `json:"ID" gorm:"primaryKey,uniqueIndex"`
 	Name             string `json:"Name"`
 	SecretHash       string `json:"-"`
 	SecretHashSalt   string `json:"-"`
@@ -60,7 +60,7 @@ func (c *DefaultClient) SetSecret(secret string) error {
 	// Hardcode hash method to sha256
 	hashMethod := "sha256"
 	// Generate a new salt for the secret hash
-	salt := generateSalt()
+	salt := GenerateSalt()
 	// Hash the secret with the salt
 	hash := HashPassword(secret, salt, hashMethod)
 	// Set the secret hash and salt
