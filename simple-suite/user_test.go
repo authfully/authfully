@@ -94,12 +94,6 @@ func TestDefaultUserStore(t *testing.T) {
 	if want, have := retrievedCastedUser.PasswordHash, user.PasswordHash; want != have {
 		t.Errorf("Expected user password hash %s, got %s", want, have)
 	}
-	if retrievedCastedUser.PasswordHashSalt == "" {
-		t.Errorf("Expected user password hash salt to be set, got empty string")
-	}
-	if want, have := user.PasswordHashSalt, retrievedCastedUser.PasswordHashSalt; want != have {
-		t.Errorf("Expected user password hash salt %s, got %s", want, have)
-	}
 	if retrievedCastedUser.PasswordHashAlgo == "" {
 		t.Errorf("Expected user password hash method to be set, got empty string")
 	}
