@@ -25,6 +25,33 @@ type AuthorizationRequest struct {
 	CodeChallengeMethod string `json:"code_challenge_method,omitempty"`
 }
 
+// Query converts the AuthorizationRequest to a url.Values to
+func (req AuthorizationRequest) Query() url.Values {
+	v := url.Values{}
+	if req.ResponseType != "" {
+		v.Set("response_type", req.ResponseType)
+	}
+	if req.ClientID != "" {
+		v.Set("client_id", req.ClientID)
+	}
+	if req.RedirectURI != "" {
+		v.Set("redirect_uri", req.RedirectURI)
+	}
+	if req.State != "" {
+		v.Set("state", req.State)
+	}
+	if req.Scope != "" {
+		v.Set("scope", req.Scope)
+	}
+	if req.CodeChallenge != "" {
+		v.Set("code_challenge", req.CodeChallenge)
+	}
+	if req.CodeChallengeMethod != "" {
+		v.Set("code_challenge_method", req.CodeChallengeMethod)
+	}
+	return v
+}
+
 // AuthResponse represents an OAuth 2.0 authorization response.
 //
 // References:
