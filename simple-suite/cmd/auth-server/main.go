@@ -2,16 +2,23 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/authfully/authfully"
 	authfullysimple "github.com/authfully/authfully/simple-suite"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	cli "github.com/urfave/cli/v2"
 	"gorm.io/driver/sqlite"
@@ -73,19 +80,116 @@ func getLoggers(debug bool) (*slog.Logger, gormlogger.Interface) {
 	return slogLogger, gormLogger
 }
 
+func encodeKeyToFile(key *ecdsa.PrivateKey, filePath string) error {
+	// Marshal the private key to PEM format
+	priKey, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return fmt.Errorf("failed to marshal private key: %w", err)
+	}
+
+	// Create a public key for the above key
+	pubKey, err := x509.MarshalPKIXPublicKey(key.Public())
+	if err != nil {
+		return fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	// Encode the private key to PEM format
+	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to create private key file: %w", err)
+	}
+	err = pem.Encode(f,
+		&pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: priKey,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to encode private key: %w", err)
+	}
+
+	// Encode the public key to PEM format
+	return pem.Encode(f,
+		&pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: pubKey,
+		},
+	)
+}
+
+func decodeKeyFromFile(filePath string) (*ecdsa.PrivateKey, error) {
+	// Read the private key from the file
+	keyData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key file: %w", err)
+	}
+
+	// Parse the private key
+	key, err := jwt.ParseECPrivateKeyFromPEM(keyData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	return key, nil
+}
+
 func serve(
 	addr string,
+	keyFilePath string,
 	us authfully.UserStore,
 	cs authfully.ClientStore,
 	logger *slog.Logger,
 ) {
 
+	var key *ecdsa.PrivateKey
+
+	// Check if the key file exists
+	if _, err := os.Stat(keyFilePath); os.IsNotExist(err) {
+		logger.Info("Key file not found, generating a new key")
+
+		// Generate a new PEM ecdsa key file
+		key, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			logger.Error("Failed to generate private key", "error", err)
+			panic(err)
+		}
+
+		// Store the key into PEM file
+		err = encodeKeyToFile(key, keyFilePath)
+		if err != nil {
+			logger.Error("Failed to encode private key to file", "error", err)
+			panic(err)
+		}
+
+		logger.Info("Private key generated and stored in file", "file", keyFilePath)
+	} else {
+		key, err = decodeKeyFromFile(keyFilePath)
+		if err != nil {
+			logger.Error("Failed to decode key from file", "error", err)
+			panic(err)
+		}
+	}
+
 	// Create an environment
 	env := &authfully.Environment{
-		AuthEndpoint:                authenticationEndpointPath,
-		TokenEndpoint:               tokenEndpointPath,
-		UserStore:                   us,
-		ClientStore:                 cs,
+		AuthEndpoint:  authenticationEndpointPath,
+		TokenEndpoint: tokenEndpointPath,
+		UserStore:     us,
+		ClientStore:   cs,
+		AuthSessionHandler: NewJwtCookieSessionHandler(
+			func(r *http.Request) *http.Cookie {
+				return &http.Cookie{
+					Name:     "auth_session",
+					Path:     "/",
+					HttpOnly: true,
+					Secure:   r.TLS != nil,
+					SameSite: http.SameSiteLaxMode,
+				}
+			},
+			key,
+			jwt.SigningMethodES256, // TODO: use a better signing method
+			authfully.AuthorizationRequestDecoderFunc(authfully.DefaultAuthorizationRequestDecoder),
+		),
 		TokenSessionStore:           nil, // TODO: implement me
 		RandomGenerator:             authfully.NewRandomGenerator(),
 		AuthorizationRequestDecoder: authfully.AuthorizationRequestDecoderFunc(authfully.DefaultAuthorizationRequestDecoder),
@@ -100,21 +204,39 @@ func serve(
 			env,
 			authfully.NewUserInterfaceEndpointHandler(
 				authfully.AuthenticationPageHTML,
-				authfully.SubmissionHandlerFunc(func(r *http.Request) (ctx context.Context, err error) {
+				authfully.SubmissionHandlerFunc(func(w http.ResponseWriter, r *http.Request) (ctx context.Context, err error) {
 					env := authfully.GetEnvironment(r.Context())
 					if env == nil {
 						panic("Environment not found")
 					}
 
-					// Decode the authorization submission
-					ar, err := env.AuthorizationRequestDecoder.Decode(r)
-					if err != nil {
-						return r.Context(), err
+					// TODO: check if the request is a valid authorization request
+					// TODO: if not, check session or cookie for the authorization request
+
+					if r.Method == "GET" {
+						// Decode the authorization submission
+						ar, err := env.AuthorizationRequestDecoder.Decode(r.URL.Query())
+						if err != nil {
+							return r.Context(), err
+						}
+						ctx = authfully.WithAuthorizationRequest(r.Context(), ar)
+
+						// handle session / cookie for storing the ar
+						env.AuthSessionHandler.SetSession(w, r, &authfully.AuthSession{
+							AuthorizationRequest: ar,
+						})
 					}
-					ctx = authfully.WithAuthorizationRequest(r.Context(), ar)
 
 					// Handle a simple form submission
 					if r.Method == "POST" {
+						sess, err := env.AuthSessionHandler.GetSession(r)
+						if err != nil {
+							return ctx, err
+						}
+						if sess == nil {
+							return ctx, fmt.Errorf("session not found")
+						}
+
 						r.ParseForm() // Parse the form data
 						email := r.Form.Get("email")
 						password := r.Form.Get("password")
@@ -138,9 +260,12 @@ func serve(
 								Form:        r.Form,
 							}
 						}
-					}
 
-					// TODO: handle session / cookie for storing the ar
+						// Set the user ID in the session
+						sess.UserID = u.GetID()
+						env.AuthSessionHandler.SetSession(w, r, sess)
+						logger.Info("User authenticated", "user", u.GetID())
+					}
 
 					return ctx, nil
 				}),
@@ -248,7 +373,7 @@ func main() {
 					us, cs := initializeStores(db, logger)
 
 					// Start the server
-					serve(addr, us, cs, logger)
+					serve(addr, "auth-server.pem", us, cs, logger)
 					return nil
 				},
 			},
@@ -340,7 +465,8 @@ func main() {
 							tx.Commit()
 
 							// Client created successfully
-							logger.Info("Client created", "client", *client, "client_secret", secret)
+							fmt.Println("Client created successfully.")
+							fmt.Printf("CLIENT_ID=%s\nCLIENT_SECRET=%s", client.GetID(), secret)
 							return nil
 						},
 					},
@@ -442,4 +568,126 @@ func main() {
 			},
 		},
 	}).Run(os.Args)
+}
+
+type JwtCookieSessionHandler struct {
+	cookieCreator  func(r *http.Request) *http.Cookie
+	privateKey     *ecdsa.PrivateKey
+	signingMethod  jwt.SigningMethod
+	authReqDecoder authfully.AuthorizationRequestDecoder
+}
+
+func NewJwtCookieSessionHandler(
+	cookieCreator func(r *http.Request) *http.Cookie,
+	privateKey *ecdsa.PrivateKey,
+	signingMethod jwt.SigningMethod,
+	authReqDecoder authfully.AuthorizationRequestDecoder,
+) *JwtCookieSessionHandler {
+	return &JwtCookieSessionHandler{
+		cookieCreator:  cookieCreator,
+		privateKey:     privateKey,
+		signingMethod:  signingMethod,
+		authReqDecoder: authReqDecoder,
+	}
+}
+
+func (h *JwtCookieSessionHandler) GetSession(r *http.Request) (*authfully.AuthSession, error) {
+	// Get the cookie from the request
+	cookie, err := r.Cookie(h.cookieCreator(r).Name)
+	if err != nil {
+		if err == http.ErrNoCookie {
+			return nil, nil // No cookie found
+		}
+		return nil, err // Other error
+	}
+
+	// Parse the JWT token from the cookie
+	token, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
+		// Check the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return h.privateKey.Public(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the token is valid
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("malformatted token claims")
+	}
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	// Parse authorization request from the claims
+	authRequestQueryRaw, ok := claims["auth_request"]
+	if !ok {
+		return nil, fmt.Errorf("auth_request claim not set")
+	}
+	authRequestQueryStr, ok := authRequestQueryRaw.(string)
+	if !ok {
+		return nil, fmt.Errorf("malformatted auth_request claim (%v)", claims["auth_request"])
+	}
+	authRequestQuery, err := url.ParseQuery(authRequestQueryStr)
+	if err != nil {
+		return nil, fmt.Errorf("malformatted auth_request claim: %v", err)
+	}
+
+	// Parse user ID from the claims, if set
+	userId := ""
+	userIdRaw, ok := claims["user_id"]
+	if ok {
+		if userId, ok = userIdRaw.(string); !ok {
+			return nil, fmt.Errorf("malformatted user_id claim (%v)", claims["user_id"])
+		}
+	}
+
+	// Create a new AuthSession from the claims
+	ar, err := h.authReqDecoder.Decode(authRequestQuery)
+	if err != nil {
+		return nil, fmt.Errorf("malformatted auth_request claim: %v", err)
+	}
+	session := &authfully.AuthSession{
+		UserID:               userId,
+		AuthorizationRequest: ar,
+	}
+
+	return session, nil
+}
+
+func (h *JwtCookieSessionHandler) SetSession(w http.ResponseWriter, r *http.Request, session *authfully.AuthSession) error {
+	// Create a new JWT token
+	claims := jwt.MapClaims{
+		"auth_request": session.AuthorizationRequest.Query().Encode(),
+	}
+	if session.UserID != "" {
+		claims["user_id"] = session.UserID
+	}
+	token := jwt.NewWithClaims(h.signingMethod, claims)
+
+	// Sign the token with the private key
+	signedToken, err := token.SignedString(h.privateKey)
+	if err != nil {
+		return err
+	}
+
+	// Set the cookie in the response
+	c := h.cookieCreator(r)
+	c.Value = signedToken
+	c.Expires = session.ExpiresAt
+	http.SetCookie(w, c)
+
+	return nil
+}
+
+func (h *JwtCookieSessionHandler) DeleteSession(w http.ResponseWriter, r *http.Request) error {
+	// Create a new cookie with the same name and set the MaxAge to -1
+	c := h.cookieCreator(r)
+	c.MaxAge = -1
+	http.SetCookie(w, c)
+
+	return nil
 }
