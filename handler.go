@@ -207,6 +207,7 @@ type Environment struct {
 	RandomGenerator             RandomGenerator
 	AuthorizationRequestDecoder AuthorizationRequestDecoder
 	AuthSubmissionDecoder       AuthSubmissionDecoder
+	AuthSessionHandler          AuthSessionHandler
 	Logger                      *slog.Logger
 }
 
@@ -251,26 +252,25 @@ type AuthorizationRequestDecoder interface {
 	//
 	// If the request is invalid or misformed, it should return an error
 	// with the error message and the error description.
-	Decode(r *http.Request) (*AuthorizationRequest, error)
+	Decode(q url.Values) (*AuthorizationRequest, error)
 }
 
 // AuthorizationRequestDecoderFunc is a function type that implements
 // the AuthorizationRequestDecoder interface. It takes an HTTP request
 // and returns an AuthorizationRequest and an error.
-type AuthorizationRequestDecoderFunc func(r *http.Request) (*AuthorizationRequest, error)
+type AuthorizationRequestDecoderFunc func(q url.Values) (*AuthorizationRequest, error)
 
 // Decode decodes the authorization request from the given HTTP request.
-func (f AuthorizationRequestDecoderFunc) Decode(r *http.Request) (*AuthorizationRequest, error) {
-	return f(r)
+func (f AuthorizationRequestDecoderFunc) Decode(q url.Values) (*AuthorizationRequest, error) {
+	return f(q)
 }
 
 // DefaultAuthorizationRequestDecoder is a default implementation of
 // AuthorizationRequestDecoder that decodes the authorization request
 // from the URL query parameters.
-func DefaultAuthorizationRequestDecoder(r *http.Request) (*AuthorizationRequest, error) {
+func DefaultAuthorizationRequestDecoder(q url.Values) (*AuthorizationRequest, error) {
 	// Decode the authorization request from the URL query parameters
 	// and return an AuthorizationRequest.
-	q := r.URL.Query()
 	req := &AuthorizationRequest{
 		ResponseType:        q.Get("response_type"),
 		ClientID:            q.Get("client_id"),
@@ -392,14 +392,14 @@ type SubmissionHandler interface {
 	//
 	// Handler MUST pass on a context, derived from HTTP request's context,
 	// with authorization request decoded and added using WithAuthorizationContext().
-	Handle(r *http.Request) (ctx context.Context, err error)
+	Handle(w http.ResponseWriter, r *http.Request) (ctx context.Context, err error)
 }
 
 // SubmissionHandlerFunc
-type SubmissionHandlerFunc func(r *http.Request) (ctx context.Context, err error)
+type SubmissionHandlerFunc func(w http.ResponseWriter, r *http.Request) (ctx context.Context, err error)
 
-func (f SubmissionHandlerFunc) Handle(r *http.Request) (ctx context.Context, err error) {
-	return f(r)
+func (f SubmissionHandlerFunc) Handle(w http.ResponseWriter, r *http.Request) (ctx context.Context, err error) {
+	return f(w, r)
 }
 
 // UserInterfaceEndpointHandler is an implementation of http.Handler for handling
@@ -441,7 +441,7 @@ func (h UserInterfaceEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 
 	// Submission handler to check and handle any user form submission
 	// or equivlant input.
-	ctx, err := h.SubmissionHandler.Handle(r)
+	ctx, err := h.SubmissionHandler.Handle(w, r)
 	if err == nil {
 		// No submission yet. Show the user interface.
 		w.Header().Set("Content-Type", "text/html")
