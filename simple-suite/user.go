@@ -23,6 +23,11 @@ func (u *DefaultUser) TableName() string {
 	return "oauth_users"
 }
 
+// GetID returns the ID of the user.
+func (u *DefaultUser) GetID() string {
+	return u.ID
+}
+
 // CheckPassword checks if the given password matches the stored password hash.
 func (u *DefaultUser) CheckPassword(password string) error {
 	return CheckPassword(password, u.PasswordHash, u.PasswordHashAlgo)

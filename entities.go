@@ -2,6 +2,9 @@ package authfully
 
 // User is an interface that represents a user in the system.
 type User interface {
+	// GetID returns the ID of the user.
+	GetID() string
+
 	// CheckPassword checks if the given password is valid for the user.
 	CheckPassword(password string) error
 }
