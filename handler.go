@@ -570,3 +570,32 @@ type UserInterfacePageFields struct {
 	Form       url.Values
 	Extra      map[string]any
 }
+
+// AuthSession is a struct that holds the information about
+type AuthSession struct {
+	// ID is the ID of the session.
+	ID string `json:"id"`
+
+	// AuthorizationRequest is the original authorization request.
+	AuthorizationRequest *AuthorizationRequest `json:"authorization_request,omitempty"`
+
+	// UserID is the ID of the user who has logged in.
+	// If a user has not logged in, this field is empty.
+	UserID string `json:"user_id,omitempty"`
+
+	// ExpiresAt is the time when the session expires.
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// AuthSessionHandler is an interface that defines methods for
+// getting and setting the authentication session in the HTTP request.
+type AuthSessionHandler interface {
+	// GetSession gets the session from the request.
+	GetSession(r *http.Request) (*AuthSession, error)
+
+	// SetSession sets the session in the request.
+	SetSession(w http.ResponseWriter, r *http.Request, session *AuthSession) error
+
+	// DeleteSession deletes the session from the request.
+	DeleteSession(w http.ResponseWriter, r *http.Request) error
+}
