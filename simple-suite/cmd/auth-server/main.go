@@ -1,13 +1,13 @@
 package main
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"html/template"
 	"log"
 	"log/slog"
 	"net"
@@ -198,82 +198,152 @@ func serve(
 
 	m := http.NewServeMux()
 
+	authenticationPageTemplate, err := template.New("page.html").Parse(authfully.AuthenticationPageHTML)
+	if err != nil {
+		logger.Error("Failed to parse authentication page template", "error", err)
+		panic(err)
+	}
+
+	scopeAuthorizationPageTemplate, err := template.New("scope.html").Parse(authfully.ScopeAuthorizationPageHTML)
+	if err != nil {
+		logger.Error("Failed to parse scope authorization page template", "error", err)
+		panic(err)
+	}
+
+	errorPageTemplate, err := template.New("error.html").Parse(authfully.ErrorPageHTML)
+	if err != nil {
+		logger.Error("Failed to parse error page template", "error", err)
+		panic(err)
+	}
+
 	m.Handle(
 		authenticationEndpointPath,
 		requestContextMiddleware(
 			env,
-			authfully.NewUserInterfaceEndpointHandler(
-				authfully.AuthenticationPageHTML,
-				authfully.SubmissionHandlerFunc(func(w http.ResponseWriter, r *http.Request) (ctx context.Context, err error) {
-					env := authfully.GetEnvironment(r.Context())
-					if env == nil {
-						panic("Environment not found")
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				env := authfully.GetEnvironment(r.Context())
+				if env == nil {
+					panic("Environment not found")
+				}
+
+				// TODO: check if the request is a valid authorization request
+				// TODO: if not, check session or cookie for the authorization request
+
+				if r.Method == "GET" {
+					// Decode the authorization submission
+					ar, err := env.AuthorizationRequestDecoder.Decode(r.URL.Query())
+					if err != nil {
+						logger.Error("Error handling user form submission", "error", err)
+						return
 					}
 
-					// TODO: check if the request is a valid authorization request
-					// TODO: if not, check session or cookie for the authorization request
+					// handle session / cookie for storing the ar
+					env.AuthSessionHandler.SetSession(w, r, &authfully.AuthSession{
+						AuthorizationRequest: ar,
+					})
+				}
 
-					if r.Method == "GET" {
-						// Decode the authorization submission
-						ar, err := env.AuthorizationRequestDecoder.Decode(r.URL.Query())
-						if err != nil {
-							return r.Context(), err
-						}
-						ctx = authfully.WithAuthorizationRequest(r.Context(), ar)
-
-						// handle session / cookie for storing the ar
-						env.AuthSessionHandler.SetSession(w, r, &authfully.AuthSession{
-							AuthorizationRequest: ar,
+				// Handle a simple form submission
+				if r.Method == "POST" {
+					sess, err := env.AuthSessionHandler.GetSession(r)
+					if err != nil {
+						logger.Error("Error handling user form submission", "error", err)
+						w.Header().Set("Content-Type", "text/html")
+						w.WriteHeader(http.StatusBadRequest)
+						errorPageTemplate.Execute(w, struct {
+							Title            string
+							ErrorDescription string
+							RedirectURI      string
+						}{
+							Title:            "Error",
+							ErrorDescription: err.Error(),
+							RedirectURI:      "",
 						})
+						return
+					}
+					if sess == nil {
+						err = fmt.Errorf("session do not exists")
+						logger.Error("Error handling user form submission", "error", err)
+						w.Header().Set("Content-Type", "text/html")
+						w.WriteHeader(http.StatusBadRequest)
+						errorPageTemplate.Execute(w, struct {
+							Title            string
+							ErrorDescription string
+							RedirectURI      string
+						}{
+							Title:            "Error",
+							ErrorDescription: err.Error(),
+							RedirectURI:      "",
+						})
+						return
 					}
 
-					// Handle a simple form submission
-					if r.Method == "POST" {
-						sess, err := env.AuthSessionHandler.GetSession(r)
-						if err != nil {
-							return ctx, err
-						}
-						if sess == nil {
-							return ctx, fmt.Errorf("session not found")
-						}
+					r.ParseForm() // Parse the form data
+					email := r.Form.Get("email")
+					password := r.Form.Get("password")
+					//nounce := r.Form.Get("nounce")
 
-						r.ParseForm() // Parse the form data
-						email := r.Form.Get("email")
-						password := r.Form.Get("password")
-						//nounce := r.Form.Get("nounce")
-
-						// Check if the user can be found in the user store
-						u, err := env.UserStore.GetUserByLoginName(email)
-						if err != nil {
-							return ctx, &authfully.UserInterfaceWarning{
+					// Check if the user can be found in the user store
+					u, err := env.UserStore.GetUserByLoginName(email)
+					if err != nil {
+						logger.Error("Error handling user form submission", "error", err)
+						authenticationPageTemplate.Execute(w, authfully.UserInterfacePageFields{
+							Title:      "Login",
+							ButtonText: "Login",
+							Action:     r.URL.Path,
+							Form:       r.Form,
+							Warning: &authfully.UserInterfaceWarning{
 								Description: "User with this email not found",
 								InnerError:  err,
 								Form:        r.Form,
-							}
-						}
+							},
+						})
+						return
+					}
 
-						// Check if the password matches the found user
-						if err = u.CheckPassword(password); err != nil {
-							return ctx, &authfully.UserInterfaceWarning{
+					// Check if the password matches the found user
+					if err = u.CheckPassword(password); err != nil {
+						logger.Error("Error handling user form submission", "error", err)
+						authenticationPageTemplate.Execute(w, authfully.UserInterfacePageFields{
+							Title:      "Login",
+							ButtonText: "Login",
+							Action:     r.URL.Path,
+							Form:       r.Form,
+							Warning: &authfully.UserInterfaceWarning{
 								Description: "Password is not correct",
 								InnerError:  err,
 								Form:        r.Form,
-							}
-						}
-
-						// Set the user ID in the session
-						sess.UserID = u.GetID()
-						env.AuthSessionHandler.SetSession(w, r, sess)
-						logger.Info("User authenticated", "user", u.GetID())
+							},
+						})
+						return
 					}
 
-					return ctx, nil
-				}),
-			),
+					// Set the user ID in the session
+					sess.UserID = u.GetID()
+					env.AuthSessionHandler.SetSession(w, r, sess)
+
+					// Redirect to the authorization endpoint
+					w.Header().Set("Location", authorizationEndpointPath)
+					w.WriteHeader(http.StatusFound)
+					return
+				}
+
+				return
+			}),
 		),
 	)
 
-	// TODO: a specific authorization page endpoint to be added for scope approval
+	// Specific authorization page endpoint to be added for scope approval
+	m.Handle(
+		authorizationEndpointPath,
+		requestContextMiddleware(
+			env,
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				scopeAuthorizationPageTemplate.Execute(w, nil)
+				return
+			}),
+		),
+	)
 
 	m.HandleFunc(tokenEndpointPath, func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("Received request for token endpoint")
