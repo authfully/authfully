@@ -2,6 +2,7 @@ package authfully
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -11,144 +12,38 @@ import (
 	"time"
 )
 
-const (
-	// AuthenticationPageHTML holds a generic HTML template
-	// for the authentication form.
-	AuthenticationPageHTML = `
-<!doctype html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<title>{{- if .Title }}{{ .Title }}{{- else }}Login{{- end}}</title>
-	<style>
-		.user-authentication {
-			display: block;
-			max-width: 400px;
-			width: calc(100% - 2rem);
-			margin: 0 auto;
-		}
-		.user-authentication__form {
-			display: flex;
-			flex-direction: column;
-			gap: 1rem 0;
-		}
-		.user-authentication__form__input {
-			padding: 0.5rem;
-			border: 1px solid #ccc;
-			border-radius: 4px;
-			font-size: 1.2rem;
-		}
-		.user-authentication__form__button {
-			padding: 0.5rem;
-			border: 1px solid #ccc;
-			border-radius: 4px;
-			font-size: 1.2rem;
-			cursor: pointer;
-		}
-		.authentication__form__warning {
-			background-color: #f8d7da;
-			color: #721c24;
-			padding: 1rem;
-			border: 1px solid #f5c6cb;
-			border-radius: 4px;
-			margin-bottom: 1rem;
-		}
-		.authentication__form__warning h2 {
-			margin: 0;
-			font-size: 1.2rem;
-			font-weight: bold;
-		}
-		.authentication__form__warning p {
-			margin: 0;
-			font-size: 1rem;
-		}
-	</style>
-</head>
-<body>
-	<main class="user-authentication">
-		<h1>{{- if .Title }}{{ .Title }}{{- else }}Login{{- end}}</h1>
-		{{- if .Warning }}
-			<div class="authentication__form__warning">
-				{{- if .Warning.Title }}
-					<h2>{{ .Warning.Title }}</h2>
-				{{- end }}
-				<p>{{ .Warning.Description }}</p>
-			</div>
-		{{- end }}
-		<form method="POST" action="{{ .Action }}" class="user-authentication__form">
-			<input
-				class="user-authentication__form__input"
-				type="text"
-				name="email"
-				placeholder="Email"
-				value="{{- if .Form }}{{ .Form.Get "email" }}{{- else  }}{{- end }}"
-				required
-			>
-			<input
-				class="user-authentication__form__input"
-				type="password"
-				name="password"
-				placeholder="Password"
-				required
-			>
-			<button
-				class="user-authentication__form__button"
-				type="submit"
-			>Login</button>
-		</form>
-	</main>
-</body>
-</html>
-`
+// authenticationPageHTML holds a generic HTML template
+// for the authentication form.
+//
+//go:embed templates/login.html.tmpl
+var authenticationPageHTML string
 
-	// ScopeAuthorizationPageHTML holds a generic HTML template
-	// for the scope authorization form.
-	ScopeAuthorizationPageHTML = `
-<!doctype html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<title>Authorization</title>
-</head>
-<body>
-	<h1>Authorization</h1>
-	<form method="POST" action="{{ .Action }}">
-		<p>Client: {{ .Client.GetName }}</p>
-		<ul>
-			{{- range .Scopes }}
-			 	<li>{{ . }}</li>
-			{{- end }}
-		</ul>
-		<button type="submit">Authorize</button>
-	</form>
-</body>
-</html>
-`
-	// ErrorPageHTML holds a generic HTML template
-	// for the error page.
-	ErrorPageHTML = `
-<!doctype html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<title>Error</title>
-</head>
-<body>
-	{{- if .Title }}
-		<h1>{{ .Title }}</h1>
-	{{- else }}
-		<h1>Error</h1>
-	{{- end }}
-	{{- if .ErrorDescription }}
-		<p>{{ .ErrorDescription }}</p>
-	{{- end }}
-	<p>
-		<a class="btn" href="{{ .RedirectURI }}">Back to application</a>
-	</p>
-</body>
-</html>
-`
-)
+// AuthenticationPageHTML returns the HTML template for the authentication form.
+func AuthenticationPageHTML() string {
+	return authenticationPageHTML
+}
+
+// scopeAuthorizationPageHTML holds a generic HTML template
+// for the scope authorization form.
+//
+//go:embed templates/authorization.html.tmpl
+var scopeAuthorizationPageHTML string
+
+// ScopeAuthorizationPageHTML returns the HTML template for the scope authorization form.
+func ScopeAuthorizationPageHTML() string {
+	return scopeAuthorizationPageHTML
+}
+
+// errorPageHTML holds a generic HTML template
+// for the error page.
+//
+//go:embed templates/error.html.tmpl
+var errorPageHTML string
+
+// ErrorPageHTML returns the HTML template for the error page.
+func ErrorPageHTML() string {
+	return errorPageHTML
+}
 
 /**
  * Code Authorization Workflow:

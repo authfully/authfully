@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Error</title>
+</head>
+<body>
+	{{- if .Title }}
+		<h1>{{ .Title }}</h1>
+	{{- else }}
+		<h1>Error</h1>
+	{{- end }}
+	{{- if .ErrorDescription }}
+		<p>{{ .ErrorDescription }}</p>
+	{{- end }}
+	<p>
+		<a class="btn" href="{{ .RedirectURI }}">Back to application</a>
+	</p>
+</body>
+</html>

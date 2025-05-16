@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+       <meta charset="utf-8">
+       <title>Authorization</title>
+</head>
+<body>
+       <h1>Authorization</h1>
+       <form method="POST" action="{{ .Action }}">
+               <p>Client: {{ .Client.GetName }}</p>
+               <ul>
+                       {{- range .Scopes }}
+                                <li>{{ . }}</li>
+                       {{- end }}
+               </ul>
+               <button type="submit">Authorize</button>
+       </form>
+</body>
+</html>

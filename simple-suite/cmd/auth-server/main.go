@@ -198,19 +198,19 @@ func serve(
 
 	m := http.NewServeMux()
 
-	authenticationPageTemplate, err := template.New("page.html").Parse(authfully.AuthenticationPageHTML)
+	authenticationPageTemplate, err := template.New("page.html").Parse(authfully.AuthenticationPageHTML())
 	if err != nil {
 		logger.Error("Failed to parse authentication page template", "error", err)
 		panic(err)
 	}
 
-	scopeAuthorizationPageTemplate, err := template.New("scope.html").Parse(authfully.ScopeAuthorizationPageHTML)
+	scopeAuthorizationPageTemplate, err := template.New("scope.html").Parse(authfully.ScopeAuthorizationPageHTML())
 	if err != nil {
 		logger.Error("Failed to parse scope authorization page template", "error", err)
 		panic(err)
 	}
 
-	errorPageTemplate, err := template.New("error.html").Parse(authfully.ErrorPageHTML)
+	errorPageTemplate, err := template.New("error.html").Parse(authfully.ErrorPageHTML())
 	if err != nil {
 		logger.Error("Failed to parse error page template", "error", err)
 		panic(err)
@@ -338,7 +338,57 @@ func serve(
 		requestContextMiddleware(
 			env,
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				scopeAuthorizationPageTemplate.Execute(w, nil)
+
+				env := authfully.GetEnvironment(r.Context())
+				if env == nil {
+					panic("Environment not found")
+				}
+
+				sess, err := env.AuthSessionHandler.GetSession(r)
+				if err != nil {
+					logger.Error("Error handling user form submission", "error", err)
+					w.Header().Set("Content-Type", "text/html")
+					w.WriteHeader(http.StatusBadRequest)
+					errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+						Title:            "Error",
+						ErrorDescription: err.Error(),
+						RedirectURI:      "", // TODO: fix me
+					})
+					return
+				}
+				if sess == nil {
+					err = fmt.Errorf("session do not exists")
+					logger.Error("Error handling authorization form page view", "error", err)
+					w.Header().Set("Content-Type", "text/html")
+					w.WriteHeader(http.StatusBadRequest)
+					errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+						Title:            "Error",
+						ErrorDescription: err.Error(),
+						RedirectURI:      "", // TODO: fix me
+					})
+					return
+				}
+
+				if sess.AuthorizationRequest == nil {
+					err = fmt.Errorf("no authorization request found in session")
+					logger.Error("Error handling authorization form page view", "error", err)
+					w.Header().Set("Content-Type", "text/html")
+					w.WriteHeader(http.StatusBadRequest)
+					errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+						Title:            "Error",
+						ErrorDescription: err.Error(),
+						RedirectURI:      "", // TODO: fix me
+					})
+					return
+				}
+
+				scopeAuthorizationPageTemplate.Execute(w, &authfully.UserInterfacePageFields{
+					Title:                "Authorization",
+					ButtonText:           "Authorize",
+					Action:               r.URL.Path,
+					Form:                 r.Form,
+					AuthorizationRequest: sess.AuthorizationRequest,
+				})
 			}),
 		),
 	)
