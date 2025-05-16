@@ -8,3 +8,10 @@
 
 # Key files
 *.pem
+
+# Log files
+*.log
+
+# Binary files
+simple-suite/cmd/auth-server/auth-server
+simple-suite/cmd/example-client-app/example-client-app
