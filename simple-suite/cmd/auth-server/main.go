@@ -250,14 +250,10 @@ func serve(
 						logger.Error("Error handling user form submission", "error", err)
 						w.Header().Set("Content-Type", "text/html")
 						w.WriteHeader(http.StatusBadRequest)
-						errorPageTemplate.Execute(w, struct {
-							Title            string
-							ErrorDescription string
-							RedirectURI      string
-						}{
+						errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
 							Title:            "Error",
 							ErrorDescription: err.Error(),
-							RedirectURI:      "",
+							RedirectURI:      "", // TODO: fix me
 						})
 						return
 					}
@@ -266,14 +262,10 @@ func serve(
 						logger.Error("Error handling user form submission", "error", err)
 						w.Header().Set("Content-Type", "text/html")
 						w.WriteHeader(http.StatusBadRequest)
-						errorPageTemplate.Execute(w, struct {
-							Title            string
-							ErrorDescription string
-							RedirectURI      string
-						}{
+						errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
 							Title:            "Error",
 							ErrorDescription: err.Error(),
-							RedirectURI:      "",
+							RedirectURI:      "", // TODO: fix me
 						})
 						return
 					}
@@ -328,7 +320,14 @@ func serve(
 					return
 				}
 
-				return
+				// Unsupported method error page
+				w.Header().Set("Content-Type", "text/html")
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+					Title:            "Error",
+					ErrorDescription: "Unsupported method",
+					RedirectURI:      "", // TODO: fix
+				})
 			}),
 		),
 	)
@@ -340,7 +339,6 @@ func serve(
 			env,
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				scopeAuthorizationPageTemplate.Execute(w, nil)
-				return
 			}),
 		),
 	)

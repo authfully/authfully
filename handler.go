@@ -379,12 +379,22 @@ func (e SubmissionError) Error() string {
 // UserInterfacePageFields is a generic struct that holds the warning
 // message and the form data for displaying in the user interface.
 type UserInterfacePageFields struct {
-	Title      string
-	ButtonText string
-	Action     string
-	Warning    *UserInterfaceWarning
-	Form       url.Values
-	Extra      map[string]any
+	Title                string
+	ButtonText           string
+	Action               string
+	Warning              *UserInterfaceWarning
+	AuthorizationRequest *AuthorizationRequest
+	Form                 url.Values
+	Extra                map[string]any
+}
+
+// ErrorPageFields is a struct that holds the fields for
+// displaying an error page.
+type ErrorPageFields struct {
+	Title            string
+	ButtonText       string
+	ErrorDescription string
+	RedirectURI      string
 }
 
 // AuthSession is a struct that holds the information about
