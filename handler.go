@@ -279,6 +279,8 @@ type UserInterfacePageFields struct {
 	Action               string
 	Warning              *UserInterfaceWarning
 	AuthorizationRequest *AuthorizationRequest
+	Client               Client
+	User                 User
 	Form                 url.Values
 	Extra                map[string]any
 }
@@ -299,6 +301,10 @@ type AuthSession struct {
 
 	// AuthorizationRequest is the original authorization request.
 	AuthorizationRequest *AuthorizationRequest `json:"authorization_request,omitempty"`
+
+	// ClientID is the ID of the client that initiated the authorization request
+	// if the client_id in the request is valid.
+	ClientID string `json:"client_id,omitempty"`
 
 	// UserID is the ID of the user who has logged in.
 	// If a user has not logged in, this field is empty.
