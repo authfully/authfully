@@ -3,6 +3,7 @@ package authfully
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // AuthorizationRequest represents an OAuth 2.0 authorization request.
@@ -50,6 +51,11 @@ func (req AuthorizationRequest) Query() url.Values {
 		v.Set("code_challenge_method", req.CodeChallengeMethod)
 	}
 	return v
+}
+
+// Scopes returns the scopes as a slice of strings.
+func (req AuthorizationRequest) Scopes() []string {
+	return strings.Split(req.Scope, " ")
 }
 
 // AuthResponse represents an OAuth 2.0 authorization response.
