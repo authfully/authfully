@@ -237,9 +237,27 @@ func serve(
 						return
 					}
 
+					// Check if the client ID is valid
+					client, err := env.ClientStore.GetClientByID(ar.ClientID)
+					if err != nil {
+						logger.Error("Error handling loading client of client_id in authorization request",
+							"client_id", ar.ClientID,
+							"error", err,
+						)
+						w.Header().Set("Content-Type", "text/html")
+						w.WriteHeader(http.StatusBadRequest)
+						errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+							Title:            "Error",
+							ErrorDescription: "Client not found",
+							RedirectURI:      "", // TODO: fix me
+						})
+						return
+					}
+
 					// handle session / cookie for storing the ar
 					env.AuthSessionHandler.SetSession(w, r, &authfully.AuthSession{
 						AuthorizationRequest: ar,
+						ClientID:             client.GetID(),
 					})
 				}
 
@@ -382,12 +400,48 @@ func serve(
 					return
 				}
 
+				// Load the client of the session
+				client, err := env.ClientStore.GetClientByID(sess.AuthorizationRequest.ClientID)
+				if err != nil {
+					logger.Error("Error loading client for the scope authorization page",
+						"client_id", sess.AuthorizationRequest.ClientID,
+						"error", err,
+					)
+					w.Header().Set("Content-Type", "text/html")
+					w.WriteHeader(http.StatusBadRequest)
+					errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+						Title:            "Error",
+						ErrorDescription: err.Error(),
+						RedirectURI:      "", // TODO: fix me
+					})
+					return
+				}
+
+				// load the user of the session
+				user, err := env.UserStore.GetUserByID(sess.UserID)
+				if err != nil {
+					logger.Error("Error loading user for the scope authorization page",
+						"user_id", sess.UserID,
+						"error", err,
+					)
+					w.Header().Set("Content-Type", "text/html")
+					w.WriteHeader(http.StatusBadRequest)
+					errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+						Title:            "Error",
+						ErrorDescription: err.Error(),
+						RedirectURI:      "", // TODO: fix me
+					})
+					return
+				}
+
 				scopeAuthorizationPageTemplate.Execute(w, &authfully.UserInterfacePageFields{
 					Title:                "Authorization",
 					ButtonText:           "Authorize",
+					AuthorizationRequest: sess.AuthorizationRequest,
+					Client:               client,
+					User:                 user,
 					Action:               r.URL.Path,
 					Form:                 r.Form,
-					AuthorizationRequest: sess.AuthorizationRequest,
 				})
 			}),
 		),
