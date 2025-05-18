@@ -98,6 +98,8 @@ type Environment struct {
 	UserStore                   UserStore
 	ClientStore                 ClientStore
 	TokenSessionStore           TokenSessionStore
+	TokenGenerator              TokenGenerator
+	TokenSessionPolicy          TokenSessionPolicy
 	RandomGenerator             RandomGenerator
 	AuthorizationRequestDecoder AuthorizationRequestDecoder
 	AuthSubmissionDecoder       AuthSubmissionDecoder
@@ -325,4 +327,64 @@ type AuthSessionHandler interface {
 
 	// DeleteSession deletes the session from the request.
 	DeleteSession(w http.ResponseWriter, r *http.Request) error
+}
+
+// TokenGenerator is an interface that defines methods for generating tokens.
+// It is used to create new access or refresh tokens.
+type TokenGenerator interface {
+	// Generate generates a new access / refresh token.
+	Generate() string
+}
+
+type DefaultTokenGenerator struct {
+	// length is the length of the generated token.
+	length int
+
+	// charset is the character set used to generate the token.
+	charset string
+}
+
+// Generate generates a new access / refresh token.
+func (g DefaultTokenGenerator) Generate() string {
+	// Generate a new random string of length g.length using the charset g.charset
+	// and return it as the token.
+	token := make([]byte, g.length)
+	for i := range token {
+		token[i] = g.charset[rand.Intn(len(g.charset))]
+	}
+	return string(token)
+}
+
+// NewDefaultTokenGenerator creates a new DefaultTokenGenerator with the given length and charset.
+func NewDefaultTokenGenerator(length int, charset string) *DefaultTokenGenerator {
+	return &DefaultTokenGenerator{
+		length:  length,
+		charset: charset,
+	}
+}
+
+// TokenSessionPolicy is an interface that defines methods for managing token session policies.
+// It is used to determine the expiration time of a token session.
+type TokenSessionPolicy interface {
+	// GetExpirationTime returns the expiration time of the token session.
+	GetExpirationTime(sess TokenSession, issuedTime time.Time) int64
+}
+
+// DefaultTokenSessionPolicy is a struct that implements the TokenSessionPolicy interface.
+// It is used to manage the expiration time of a token session.
+type DefaultTokenSessionPolicy struct {
+	// AccessTokenLifetime is the lifetime of the access token in seconds.
+	AccessTokenLifetime int64
+}
+
+// GetExpirationTime returns the expiration time of the token session.
+func (p DefaultTokenSessionPolicy) GetExpirationTime(sess TokenSession, issuedTime time.Time) int64 {
+	return issuedTime.Add(time.Duration(p.AccessTokenLifetime) * time.Second).Unix()
+}
+
+// NewDefaultTokenSessionPolicy creates a new DefaultTokenSessionPolicy with the given access token lifetime.
+func NewDefaultTokenSessionPolicy(accessTokenLifetime int64) *DefaultTokenSessionPolicy {
+	return &DefaultTokenSessionPolicy{
+		AccessTokenLifetime: accessTokenLifetime,
+	}
 }

@@ -53,6 +53,22 @@ func (req AuthorizationRequest) Query() url.Values {
 	return v
 }
 
+// RedirectURIWithQuery returns the redirect URI with the given query parameters.
+// It is used to create the redirect URI for the authorization request.
+func (req AuthorizationRequest) RedirectURIWithQuery(q url.Values) string {
+	// Create a new URL object from the redirect URI
+	redirectUri, err := url.Parse(req.RedirectURI)
+	if err != nil {
+		return req.RedirectURI
+	}
+
+	// Add the query parameters to the URL
+	redirectUri.RawQuery = q.Encode()
+
+	// Return the full URL as a string
+	return redirectUri.String()
+}
+
 // Scopes returns the scopes as a slice of strings.
 func (req AuthorizationRequest) Scopes() []string {
 	return strings.Split(req.Scope, " ")
@@ -86,19 +102,19 @@ type AuthResponse struct {
 	Extra map[string]string `json:"-"`
 }
 
-// ToQueryValues converts the AuthResponse to a url.Values to
+// ToQuery converts the AuthResponse to a url.Values to
 // be easily converted to URL encoded query string.
-func (resp AuthResponse) ToQueryValues() url.Values {
+func (resp AuthResponse) ToQuery() url.Values {
 	v := url.Values{}
 
 	// If the response is an access token response, use that.
 	if resp.AccessTokenResponse != nil {
-		return resp.AccessTokenResponse.ToQueryValues()
+		return resp.AccessTokenResponse.ToQuery()
 	}
 
 	// If the response is an access token error response, use that.
 	if resp.AccessTokenErrorResponse != nil {
-		return resp.AccessTokenErrorResponse.ToQueryValues()
+		return resp.AccessTokenErrorResponse.ToQuery()
 	}
 
 	// Otherwise, use the authorization response values.
@@ -245,9 +261,9 @@ type AccessTokenResponse struct {
 	State        string `json:"state,omitempty"`
 }
 
-// ToQueryValues converts the AccessTokenResponse to a url.Values to
+// ToQuery converts the AccessTokenResponse to a url.Values to
 // be easily converted to URL encoded query string.
-func (resp AccessTokenResponse) ToQueryValues() url.Values {
+func (resp AccessTokenResponse) ToQuery() url.Values {
 	v := url.Values{}
 	if resp.AccessToken != "" {
 		v.Set("access_token", resp.AccessToken)
@@ -305,9 +321,9 @@ func (e AccessTokenErrorResponse) Error() string {
 	return fmt.Sprintf("OAuth2 error (%s): %s", e.ErrorType, msg)
 }
 
-// ToQueryValues converts the AuthorizationErrorResponse to a url.Values to
+// ToQuery converts the AuthorizationErrorResponse to a url.Values to
 // be easily converted to URL encoded query string.
-func (e AccessTokenErrorResponse) ToQueryValues() url.Values {
+func (e AccessTokenErrorResponse) ToQuery() url.Values {
 	v := url.Values{}
 	if e.ErrorType != "" {
 		v.Set("error", e.ErrorType)

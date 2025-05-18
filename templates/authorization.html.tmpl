@@ -65,7 +65,10 @@
                     <li>{{ . }}</li>
                 {{- end }}
             </ul>
-            <button class="authorization__form__button" type="submit">{{- if .ButtonText }}{{ .ButtonText }}{{- else }}Authorize{{- end }}</button>
+            <button
+                class="authorization__form__button"
+                type="submit"
+            >{{- if .ButtonText }}{{ .ButtonText }}{{- else }}Authorize{{- end }}</button>
         </form>
     </main>
 </body>

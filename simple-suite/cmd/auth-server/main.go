@@ -191,6 +191,8 @@ func serve(
 			authfully.AuthorizationRequestDecoderFunc(authfully.DefaultAuthorizationRequestDecoder),
 		),
 		TokenSessionStore:           nil, // TODO: implement me
+		TokenGenerator:              authfully.NewDefaultTokenGenerator(32, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
+		TokenSessionPolicy:          authfully.NewDefaultTokenSessionPolicy(60 * 60),
 		RandomGenerator:             authfully.NewRandomGenerator(),
 		AuthorizationRequestDecoder: authfully.AuthorizationRequestDecoderFunc(authfully.DefaultAuthorizationRequestDecoder),
 		Logger:                      logger,
@@ -431,6 +433,23 @@ func serve(
 						ErrorDescription: err.Error(),
 						RedirectURI:      "", // TODO: fix me
 					})
+					return
+				}
+
+				if r.Method == "POST" {
+					// TODO: add some sort of check here
+
+					// Creaate PendingTokenSession with TokenSessionStore
+
+					// Redirect user back to client
+					resp := &authfully.AuthResponse{
+						ResponseType: sess.AuthorizationRequest.ResponseType,
+						Code:         env.TokenGenerator.Generate(),
+						State:        sess.AuthorizationRequest.State,
+					}
+
+					w.Header().Set("Location", sess.AuthorizationRequest.RedirectURIWithQuery(resp.ToQuery()))
+					w.WriteHeader(http.StatusFound)
 					return
 				}
 

@@ -94,9 +94,6 @@ type PendingTokenSession interface {
 
 	// GetScope returns the scopes of the token session.
 	GetScope() string
-
-	// GetState returns the state of the token session.
-	GetState() string
 }
 
 // TokenSession is an interface that represents a token session in the system.
@@ -125,7 +122,7 @@ type TokenSession interface {
 
 	// GetAccessTokenExpiry returns the access token expiry time of the token session.
 	// It is in Unix timestamp format.
-	GetAccessTokenExpiry() int64
+	GetAccessTokenExpiresAt() int64
 
 	// GetScope returns the scopes of the token session.
 	GetScope() string
@@ -138,7 +135,7 @@ type TokenSession interface {
 type TokenSessionStore interface {
 
 	// GetPendingTokenSessionByID retrieves a pending token session by its ID.
-	CreatePendingTokenSession(req *TokenSessionRequest) (PendingTokenSession, error)
+	CreatePendingTokenSession(req *TokenSessionRequest, tokenType string) (PendingTokenSession, error)
 
 	// GetTokenSessionByID retrieves a token session by its ID.
 	GetPendingTokenSessionByID(id string) (PendingTokenSession, error)
