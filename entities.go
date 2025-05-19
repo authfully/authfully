@@ -51,6 +51,9 @@ type TokenSessionRequest struct {
 	// ClientID is the ID of the client making the request.
 	ClientID string `json:"client_id,omitempty"`
 
+	// UserID is the ID of the user associated with the token session.
+	UserID string `json:"user_id,omitempty"`
+
 	// Code is the authorization code received from the authorization server.
 	Code string `json:"code,omitempty"`
 
