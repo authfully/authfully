@@ -189,13 +189,14 @@ func NewTokenSessionStore(
 }
 
 // Create a new PendingTokenSession in the database.
-func (s *DefaultTokenSessionStore) CreatePendingTokenSession(req *authfully.TokenSessionRequest, tokenType string) error {
+func (s *DefaultTokenSessionStore) CreatePendingTokenSession(req *authfully.TokenSessionRequest, tokenType string) (authfully.PendingTokenSession, error) {
 	var count int64 = 1
 	var id string
 
 	sess := &DefaultPendingTokenSession{
 		GrantType:           req.GrantType,
 		ClientID:            req.ClientID,
+		UserID:              req.UserID,
 		Code:                req.Code,
 		CodeChallenge:       req.CodeChallenge,
 		CodeChallengeMethod: req.CodeChallengeMethod,
@@ -208,16 +209,16 @@ func (s *DefaultTokenSessionStore) CreatePendingTokenSession(req *authfully.Toke
 		id = uuid.New().String()
 		q := s.db.Model(&DefaultPendingTokenSession{}).Where("id = ?", sess.ID)
 		if q.Error != nil {
-			return fmt.Errorf("failed to check user ID uniqueness: %w", q.Error)
+			return nil, fmt.Errorf("failed to check user ID uniqueness: %w", q.Error)
 		}
 		q.Count(&count)
 	}
 	sess.ID = id
 
 	if err := s.db.Create(sess).Error; err != nil {
-		return fmt.Errorf("failed to create PendingTokenSession: %w", err)
+		return nil, fmt.Errorf("failed to create PendingTokenSession: %w", err)
 	}
-	return nil
+	return sess, nil
 }
 
 // GetPendingTokenSessionByID retrieves a pending token session by its ID from the database.
@@ -256,4 +257,51 @@ func (s *DefaultTokenSessionStore) GetTokenSessionByID(id string) (authfully.Tok
 		return nil, err
 	}
 	return sess, nil
+}
+
+// GetTokenSessionByCode retrieves a token session by its authorization code from the database.
+func (s *DefaultTokenSessionStore) GetTokenSessionByCode(code string) (authfully.TokenSession, error) {
+	var sess *DefaultTokenSession
+	if err := s.db.First(sess, "code = ?", code).Error; err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// GetTokenSessionByAccessToken retrieves a token session by its access token from the database.
+func (s *DefaultTokenSessionStore) GetTokenSessionByAccessToken(accessToken string) (authfully.TokenSession, error) {
+	var sess *DefaultTokenSession
+	if err := s.db.First(sess, "access_token = ?", accessToken).Error; err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// GetTokenSessionByRefreshToken retrieves a token session by its refresh token from the database.
+func (s *DefaultTokenSessionStore) GetTokenSessionByRefreshToken(refreshToken string) (authfully.TokenSession, error) {
+	var sess *DefaultTokenSession
+	if err := s.db.First(sess, "refresh_token = ?", refreshToken).Error; err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// RevokeTokenSession revokes a token session by its ID in the database.
+func (s *DefaultTokenSessionStore) RevokeTokenSession(id string) error {
+	if err := s.db.Model(&DefaultTokenSession{}).Where("id = ?", id).Update("revoked", true).Error; err != nil {
+		return fmt.Errorf("failed to revoke token session: %w", err)
+	}
+	return nil
+}
+
+// AutoMigrate automatically migrates the database schema
+// to match the DefaultTokenSession struct.
+func (s *DefaultTokenSessionStore) AutoMigrate() error {
+	if err := s.db.AutoMigrate(&DefaultTokenSession{}); err != nil {
+		return fmt.Errorf("failed to migrate token session: %w", err)
+	}
+	if err := s.db.AutoMigrate(&DefaultPendingTokenSession{}); err != nil {
+		return fmt.Errorf("failed to migrate pending token session: %w", err)
+	}
+	return nil
 }

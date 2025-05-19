@@ -138,6 +138,7 @@ func serve(
 	keyFilePath string,
 	us authfully.UserStore,
 	cs authfully.ClientStore,
+	ts authfully.TokenSessionStore,
 	logger *slog.Logger,
 ) {
 
@@ -172,10 +173,11 @@ func serve(
 
 	// Create an environment
 	env := &authfully.Environment{
-		AuthEndpoint:  authenticationEndpointPath,
-		TokenEndpoint: tokenEndpointPath,
-		UserStore:     us,
-		ClientStore:   cs,
+		AuthEndpoint:      authenticationEndpointPath,
+		TokenEndpoint:     tokenEndpointPath,
+		UserStore:         us,
+		ClientStore:       cs,
+		TokenSessionStore: ts,
 		AuthSessionHandler: NewJwtCookieSessionHandler(
 			func(r *http.Request) *http.Cookie {
 				return &http.Cookie{
@@ -190,7 +192,6 @@ func serve(
 			jwt.SigningMethodES256, // TODO: use a better signing method
 			authfully.AuthorizationRequestDecoderFunc(authfully.DefaultAuthorizationRequestDecoder),
 		),
-		TokenSessionStore:           nil, // TODO: implement me
 		TokenGenerator:              authfully.NewDefaultTokenGenerator(32, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
 		TokenSessionPolicy:          authfully.NewDefaultTokenSessionPolicy(60 * 60),
 		RandomGenerator:             authfully.NewRandomGenerator(),
@@ -447,11 +448,34 @@ func serve(
 					// TODO: add some sort of check here
 
 					// Creaate PendingTokenSession with TokenSessionStore
+					req := &authfully.TokenSessionRequest{
+						GrantType:           "authorization_code",
+						ClientID:            client.GetID(),
+						UserID:              user.GetID(),
+						Code:                env.TokenGenerator.Generate(),
+						Scope:               sess.AuthorizationRequest.Scope,
+						CodeChallengeMethod: sess.AuthorizationRequest.CodeChallengeMethod,
+						CodeChallenge:       sess.AuthorizationRequest.CodeChallenge,
+					}
+					pendingSess, err := ts.CreatePendingTokenSession(req, "Bearer")
+					if err != nil {
+						logger.Error("Error creating pending token session", "error", err)
+						w.Header().Set("Content-Type", "text/html")
+						w.WriteHeader(http.StatusBadRequest)
+
+						errorPageTemplate.Execute(w, &authfully.ErrorPageFields{
+							Title:            "Error",
+							ErrorDescription: err.Error(),
+							RedirectURI:      "", // TODO: fix
+						})
+						return
+					}
+					logger.Info("Created pending token session", "session_id", pendingSess.GetID())
 
 					// Redirect user back to client
 					resp := &authfully.AuthResponse{
 						ResponseType: sess.AuthorizationRequest.ResponseType,
-						Code:         env.TokenGenerator.Generate(),
+						Code:         req.Code,
 						State:        sess.AuthorizationRequest.State,
 					}
 
@@ -511,7 +535,7 @@ func getDatabase(dsn string, gormLogger gormlogger.Interface, logger *slog.Logge
 
 // initializeStores initializes the stores object and the underlying tables.
 // Do automigration of the tables.
-func initializeStores(db *gorm.DB, logger *slog.Logger) (authfully.UserStore, authfully.ClientStore) {
+func initializeStores(db *gorm.DB, logger *slog.Logger) (authfully.UserStore, authfully.ClientStore, authfully.TokenSessionStore) {
 	logger.Info("database migration started")
 
 	// Initialize the user store
@@ -526,9 +550,14 @@ func initializeStores(db *gorm.DB, logger *slog.Logger) (authfully.UserStore, au
 		log.Fatalf("Failed to migrate client store: %v", err)
 	}
 
+	ts := authfullysimple.NewTokenSessionStore(db, nil, nil)
+	if err := ts.AutoMigrate(); err != nil {
+		log.Fatalf("Failed to migrate token session store: %v", err)
+	}
+
 	logger.Info("database migration completed")
 
-	return us, cs
+	return us, cs, ts
 }
 
 func main() {
@@ -568,10 +597,10 @@ func main() {
 					db := getDatabase("auth-server.sqlite3", gormLogger, logger)
 
 					// Initialize the stores
-					us, cs := initializeStores(db, logger)
+					us, cs, ts := initializeStores(db, logger)
 
 					// Start the server
-					serve(addr, "auth-server.pem", us, cs, logger)
+					serve(addr, "auth-server.pem", us, cs, ts, logger)
 					return nil
 				},
 			},
