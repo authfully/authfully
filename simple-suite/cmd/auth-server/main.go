@@ -261,6 +261,13 @@ func serve(
 						AuthorizationRequest: ar,
 						ClientID:             client.GetID(),
 					})
+
+					authenticationPageTemplate.Execute(w, authfully.UserInterfacePageFields{
+						Title:      "Login",
+						ButtonText: "Login",
+						Action:     r.URL.Path,
+					})
+					return
 				}
 
 				// Handle a simple form submission
